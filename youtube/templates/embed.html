@@ -85,7 +85,7 @@
         <a class="video-link text-height" href="{{ video_url }}" title="{{ title }}" target="_blank" rel="noopener noreferrer"><h2 class="text-height">{{ title }}</h2></a>
         <div class="video-info-bar text-height">
             <ol class="video-info-list text-height">
-                <li class="text-height"><time class="text-height"><span class="text-height">{{ time_published }}</span></time></li>
+                <li class="text-height"><time class="text-height"><span class="text-height">{{ published_timestamp|date_time(published_precision) if published_timestamp is not none else time_published }}</span></time></li>
                 <li class="text-height"><address class="text-height"><span class="text-height">Uploaded by <a class="text-height" href="{{ uploader_channel_url }}" title="{{ uploader }}" target="_blank" rel="noopener noreferrer">{{ uploader }}</a></span></address></li>
             </ol>
         </div>
@@ -108,9 +108,11 @@
             <script src="/youtube.com/static/js/plyr-start.js"></script>
             <!-- /plyr -->
         {% endif %}
+        <script src="/youtube.com/static/js/chapters.js"></script>
 
         {% if settings.use_video_hotkeys %}
             <script src="/youtube.com/static/js/common.js"></script>
+            <link href="/youtube.com/static/hotkeys.css" rel="stylesheet">
             <script src="/youtube.com/static/js/hotkeys.js"></script>
         {% endif %}
     </body>

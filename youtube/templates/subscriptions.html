@@ -20,11 +20,134 @@
         .current-tag{
             margin-bottom:10px;
         }
+        .feed-filters{
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px 16px;
+            margin: 0px 10px 10px 0px;
+            padding: 6px 10px;
+            background-color: var(--interface-color);
+        }
+            .feed-filters-label{
+                font-weight: bold;
+            }
+            .feed-filter{
+                display: inline-flex;
+                align-items: center;
+                gap: 5px;
+                cursor: pointer;
+                user-select: none;
+            }
+        .feed-empty{
+            opacity: 0.8;
+        }
+
+    .check-status{
+        position: fixed;
+        left: 10px;
+        bottom: 10px;
+        z-index: 10;
+        width: 360px;
+        max-width: calc(100% - 20px);
+        padding: 10px 12px;
+        background-color: var(--interface-color);
+        border: 1px solid var(--interface-border-color);
+        border-radius: 4px;
+        box-shadow: 0px 2px 8px rgba(0, 0, 0, 0.3);
+    }
+    .check-status[hidden]{
+        display: none;
+    }
+        .check-status-row{
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .check-status-text{
+            flex-grow: 1;
+        }
+        .check-spinner{
+            flex-shrink: 0;
+            width: 16px;
+            height: 16px;
+            border: 3px solid rgba(128, 128, 128, 0.35);
+            border-top-color: rgb(var(--link-color-rgb));
+            border-radius: 50%;
+            animation: check-spin 0.8s linear infinite;
+        }
+        .check-spinner[hidden], .check-status button[hidden]{
+            display: none;
+        }
+        @keyframes check-spin{
+            to { transform: rotate(360deg); }
+        }
+        @media (prefers-reduced-motion: reduce){
+            .check-spinner{
+                animation-duration: 3s;
+            }
+        }
+        .check-status-close{
+            border: none;
+            background: none;
+            font-size: 1.2rem;
+            line-height: 1;
+            cursor: pointer;
+            color: inherit;
+        }
+        .check-progress{
+            margin-top: 8px;
+            height: 4px;
+            background-color: rgba(128, 128, 128, 0.3);
+        }
+            .check-progress-fill{
+                width: 0%;
+                height: 100%;
+                background-color: rgb(var(--link-color-rgb));
+                transition: width 0.3s;
+            }
+    @media (max-width:750px){
+        /* above the "Toggle Sidebar" bar */
+        .check-status{
+            bottom: 80px;
+        }
+    }
         .video-section .page-button-row{
             justify-content: center;
         }
     .subscriptions-sidebar-fixed-container{
         display: none;
+    }
+    .sidebar-collapse-button{
+        margin-left: auto;
+    }
+    #sidebar-collapse-cbox:checked ~ .video-section .sidebar-collapse-button .when-shown,
+    #sidebar-collapse-cbox:not(:checked) ~ .video-section .sidebar-collapse-button .when-hidden{
+        display: none;
+    }
+    @media (min-width:751px){
+        #sidebar-collapse-cbox:checked ~ .subscriptions-sidebar{
+            display: none;
+        }
+        /* The sidebar ends where the videos end. Its contents follow the page
+        as it scrolls and scroll on their own when they don't fit. */
+        .subscriptions-sidebar{
+            position: relative;
+            flex-shrink: 0;
+        }
+        .sidebar-content{
+            position: absolute;
+            top: 0px;
+            bottom: 0px;
+            left: 0px;
+            right: 0px;
+        }
+        .sidebar-sticky{
+            position: sticky;
+            top: 0px;
+            max-height: min(100vh, 100%);
+            overflow-y: auto;
+        }
     }
     .subscriptions-sidebar{
         width: 310px;
@@ -62,6 +185,9 @@
             display: initial;
             position: relative;
             padding-bottom: 70px;
+        }
+        .sidebar-collapse-button{
+            display: none;
         }
         .subscriptions-sidebar{
             position: absolute;
@@ -102,13 +228,29 @@
 {% endblock style %}
 
 {% block main %}
+    <input id="sidebar-collapse-cbox" type="checkbox" hidden {{ 'checked' if sidebar_hidden else '' }}>
     <div class="video-section">
         {% if current_tag %}
             <h2 class="current-tag">{{ current_tag }}</h2>
         {% endif %}
+        <form class="feed-filters" id="feed-filters" method="GET" action="/youtube.com/subscriptions">
+            <input type="hidden" name="set_filters" value="1">
+            {% if current_tag %}
+                <input type="hidden" name="tag" value="{{ current_tag }}">
+            {% endif %}
+            <span class="feed-filters-label">Hide:</span>
+            {% for value, label in [('watched', 'Watched'), ('video', 'Videos'), ('live', 'Livestreams & VODs'), ('short', 'Shorts')] %}
+                <label class="feed-filter"><input type="checkbox" name="hide" value="{{ value }}" {{ 'checked' if value in hide else '' }}>{{ label }}</label>
+            {% endfor %}
+            <noscript><input type="submit" value="Apply"></noscript>
+            <label for="sidebar-collapse-cbox" class="sidebar-collapse-button button"><span class="when-shown">Hide sidebar</span><span class="when-hidden">Show sidebar</span></label>
+        </form>
+        {% if not videos %}
+            <p class="feed-empty">{{ 'No videos match. Try showing more types of videos above.' if hide else 'No videos yet.' }}</p>
+        {% endif %}
         <nav class="item-grid">
             {% for video_info in videos %}
-                {{ common_elements.item(video_info) }}
+                {{ common_elements.item(video_info, include_checkbox=false) }}
             {% endfor %}
         </nav>
 
@@ -116,6 +258,17 @@
             {{ common_elements.page_buttons(num_pages, '/youtube.com/subscriptions', parameters_dictionary) }}
         </nav>
     </div>
+
+    <div class="check-status" id="check-status" role="status" hidden>
+        <div class="check-status-row">
+            <span class="check-spinner" id="check-spinner" aria-hidden="true"></span>
+            <span class="check-status-text" id="check-status-text"></span>
+            <button type="button" class="check-status-reload" id="check-status-reload" hidden>Show them</button>
+            <button type="button" class="check-status-close" id="check-status-close" title="Close" aria-label="Close" hidden>×</button>
+        </div>
+        <div class="check-progress"><div class="check-progress-fill" id="check-progress-fill"></div></div>
+    </div>
+    <script src="/youtube.com/static/js/subscriptions.js" defer></script>
 
     <input id="subscriptions-sidebar-toggle-cbox" type="checkbox" hidden>
     <div class="subscriptions-sidebar">
@@ -125,6 +278,7 @@
 Sidebar</label>
             </div>
         </div>
+        <div class="sidebar-content"><div class="sidebar-sticky">
         <div class="sidebar-links">
             <a href="/youtube.com/subscription_manager" class="sub-manager-link">Subscription Manager</a>
             <form method="POST" class="refresh-all">
@@ -175,6 +329,7 @@ Sidebar</label>
                 </li>
             {% endfor %}
         </ol>
+        </div></div>
     </div>
 
 {% endblock main %}

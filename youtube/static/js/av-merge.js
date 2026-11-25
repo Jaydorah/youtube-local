@@ -21,6 +21,15 @@
 
 
 
+// How often to look at whether the video is waiting for data (ms)
+const STALL_CHECK_INTERVAL = 250;
+// How long a seek may stay unfinished with its data in the buffer before
+// it's started again (ms). With the data there a seek takes about 20 ms.
+// Doubles each time, for slow decoders.
+const RESEEK_FIRST_WAIT = 400;
+// HTMLMediaElement.HAVE_FUTURE_DATA: enough to keep playing
+const HAVE_FUTURE_DATA = 3;
+
 function AVMerge(video, srcInfo, startTime){
     this.audioSource = null;
     this.videoSource = null;
@@ -35,6 +44,10 @@ function AVMerge(video, srcInfo, startTime){
     this.opened = false;
     this.audioEndOfStreamCalled = false;
     this.videoEndOfStreamCalled = false;
+    this.stallCheckTimer = null;
+    this.stalledAtTime = null;
+    this.seekDataReadySince = null;
+    this.reseekWait = RESEEK_FIRST_WAIT;
     if (!('MediaSource' in window)) {
         reportError('MediaSource not supported.');
         return;
@@ -101,6 +114,8 @@ AVMerge.prototype.sourceOpen = function(_) {
     this.seekingEvt = addEvent(this.video, 'seeking',
                                debounce(this.seek.bind(this), 500));
     //this.video.onseeked = function() {console.log('seeked')};
+    this.stallCheckTimer = setInterval(this.checkStalled.bind(this),
+                                       STALL_CHECK_INTERVAL);
 }
 AVMerge.prototype.close = function() {
     if (this.closed)
@@ -110,6 +125,7 @@ AVMerge.prototype.close = function() {
     this.audioStream.close();
     this.timeUpdateEvt.remove();
     this.seekingEvt.remove();
+    clearInterval(this.stallCheckTimer);
     if (this.mediaSource.readyState == 'open')
         this.mediaSource.endOfStream();
 }
@@ -118,14 +134,66 @@ AVMerge.prototype.checkBothBuffers = function() {
     this.videoStream.checkBuffer();
 }
 AVMerge.prototype.seek = function(e) {
-    if (this.mediaSource.readyState === 'open') {
+    // 'ended' is after endOfStream, when everything up to the end of the
+    // video was buffered. Appending to it opens it again.
+    if (this.mediaSource.readyState !== 'closed' && this.haveSegmentIndexes()) {
         this.seeking = true;
         this.audioStream.handleSeek();
         this.videoStream.handleSeek();
         this.seeking = false;
     } else {
-        reportWarning('seek but not open? readyState:',
+        reportWarning('seek but not ready? readyState:',
                       this.mediaSource.readyState);
+    }
+}
+AVMerge.prototype.haveSegmentIndexes = function() {
+    return [this.audioStream, this.videoStream].every(
+        (stream) => stream && stream.sidx && stream.sidx.entries);
+}
+// Buffering is driven by timeupdate, which the browser doesn't fire while
+// the video waits for data: after seeking to a part that isn't buffered, or
+// when playback catches up with the buffer. If what was fetched for that
+// position isn't enough for the browser to continue, nothing would ever
+// fetch more, and the video would stay frozen. So this runs on a timer and,
+// while the video is waiting, keeps buffering from the current position.
+AVMerge.prototype.checkStalled = function() {
+    var video = this.video;
+    if (this.closed || this.mediaSource.readyState === 'closed'
+            || !this.haveSegmentIndexes())
+        return;
+    var waiting = video.seeking || video.readyState < HAVE_FUTURE_DATA;
+    if (!waiting || video.ended) {
+        this.stalledAtTime = null;
+        this.seekDataReadySince = null;
+        this.reseekWait = RESEEK_FIRST_WAIT;
+        return;
+    }
+    // Still moving, such as while the seek bar is being dragged: don't
+    // fetch segments for every position on the way
+    if (video.currentTime !== this.stalledAtTime) {
+        this.stalledAtTime = video.currentTime;
+        this.seekDataReadySince = null;
+        return;
+    }
+    this.checkBothBuffers();
+
+    // Firefox often doesn't continue a seek when its data arrives after
+    // the seek started, although it's all there. Seeking to the same time
+    // again gets it going.
+    if (!video.seeking || !this.audioStream.haveDataAt(video.currentTime)
+            || !this.videoStream.haveDataAt(video.currentTime)) {
+        this.seekDataReadySince = null;
+        return;
+    }
+    var now = performance.now();
+    if (this.seekDataReadySince === null) {
+        this.seekDataReadySince = now;
+    } else if (now - this.seekDataReadySince >= this.reseekWait) {
+        reportDebug('Seek not finished although its data is buffered,',
+                    'seeking again');
+        this.seekDataReadySince = now;
+        this.reseekWait *= 2;
+        video.currentTime = video.currentTime;
     }
 }
 AVMerge.prototype.audioEndOfStream = function() {
@@ -463,7 +531,11 @@ Stream.prototype.segmentInBuffer = function(segmentIdx) {
     if (this.streamType == 'video')
         var endError = 1/(this.avMerge.videoSource.fps || 30);
     else
-        var endError = 0.01
+        // An audio frame is about 0.02 seconds. With less than that the
+        // last segment of some videos counts as missing forever, since it
+        // ends a little before what the index says, and it gets fetched
+        // again and again instead of the video ending.
+        var endError = 0.03
     var timeEnd = (entry.tickEnd+1)/this.sidx.timeScale - endError;
 
     var timeRanges = this.sourceBuffer.buffered;
@@ -508,8 +580,26 @@ Stream.prototype.fetchSegmentIfNeeded = function(segmentIdx) {
     this.fetchSegment(segmentIdx);
 }
 Stream.prototype.handleSeek = function() {
-    var segmentIdx = this.getSegmentIdx(this.video.currentTime);
+    var time = this.video.currentTime;
+    var segmentIdx = this.getSegmentIdx(time);
     this.fetchSegmentIfNeeded(segmentIdx);
+    // The segment can have next to nothing after the new position, or
+    // nothing at all when the position is the segment's end: the real end
+    // is a little before what the index says. The browser needs some to
+    // continue, so get the next one too.
+    var entry = this.sidx.entries[segmentIdx];
+    var secondsLeft = (entry.tickEnd+1)/this.sidx.timeScale - time;
+    if (secondsLeft < 2)
+        this.fetchSegmentIfNeeded(segmentIdx + 1);
+}
+// Whether the buffer has the given time, with a little after it
+Stream.prototype.haveDataAt = function(time) {
+    var timeRanges = this.sourceBuffer.buffered;
+    for (var i=0; i < timeRanges.length; i++) {
+        if (timeRanges.start(i) <= time && time + 0.1 < timeRanges.end(i))
+            return true;
+    }
+    return false;
 }
 Stream.prototype.reportDebug = function(...args) {
     reportDebug(String(this.streamType) + ':', ...args);

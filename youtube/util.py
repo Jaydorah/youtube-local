@@ -54,7 +54,15 @@ import urllib3.contrib.socks
 
 URL_ORIGIN = "/https://www.youtube.com"
 
-connection_pool = urllib3.PoolManager(cert_reqs = 'CERT_REQUIRED')
+# Number of idle connections kept open per host. urllib3 defaults to 1, so
+# whenever requests to the same host overlap (thumbnails on a page, the audio
+# and video streams of one video), every request except one opens a new TLS
+# connection and throws it away afterwards. A browser sends up to 6 requests
+# at a time, and checking subscriptions sends up to 10.
+MAX_CONNECTIONS_PER_HOST = 10
+
+connection_pool = urllib3.PoolManager(cert_reqs = 'CERT_REQUIRED',
+                                      maxsize = MAX_CONNECTIONS_PER_HOST)
 
 class TorManager:
     MAX_TRIES = 3
@@ -65,7 +73,8 @@ class TorManager:
         self.old_tor_connection_pool = None
         self.tor_connection_pool = urllib3.contrib.socks.SOCKSProxyManager(
             'socks5h://127.0.0.1:' + str(settings.tor_port) + '/',
-            cert_reqs = 'CERT_REQUIRED')
+            cert_reqs = 'CERT_REQUIRED',
+            maxsize = MAX_CONNECTIONS_PER_HOST)
         self.tor_pool_refresh_time = time.monotonic()
         settings.add_setting_changed_hook(
             'tor_port',
@@ -85,7 +94,8 @@ class TorManager:
 
         self.tor_connection_pool = urllib3.contrib.socks.SOCKSProxyManager(
             'socks5h://127.0.0.1:' + str(settings.tor_port) + '/',
-            cert_reqs = 'CERT_REQUIRED')
+            cert_reqs = 'CERT_REQUIRED',
+            maxsize = MAX_CONNECTIONS_PER_HOST)
         self.tor_pool_refresh_time = time.monotonic()
 
     def get_tor_connection_pool(self):
@@ -429,14 +439,17 @@ class RateLimitedQueue(gevent.queue.Queue):
 
     def get(self):
         self.lock.acquire()     # blocks if another greenlet currently has the lock
+        # Subtract the burst after waiting rather than resetting to 0, so
+        # that anything count_extra added beyond the burst, or added during
+        # the wait, counts against the next burst instead of being forgotten
         if self.count_since_last_wait >= self.subsequent_bursts and self.surpassed_initial:
             gevent.sleep(self.waiting_period)
-            self.count_since_last_wait = 0
+            self.count_since_last_wait -= self.subsequent_bursts
 
         elif self.count_since_last_wait >= self.initial_burst and not self.surpassed_initial:
             self.surpassed_initial = True
             gevent.sleep(self.waiting_period)
-            self.count_since_last_wait = 0
+            self.count_since_last_wait -= self.initial_burst
 
         self.count_since_last_wait += 1
 
@@ -456,6 +469,12 @@ class RateLimitedQueue(gevent.queue.Queue):
         self.lock.release()
 
         return item
+
+    def count_extra(self, amount):
+        '''Counts amount more towards the rate limit. For when handling an
+        item taken from the queue turns out to take more work (such as
+        more requests) than the 1 that get() counted for it.'''
+        self.count_since_last_wait += amount
 
 
 

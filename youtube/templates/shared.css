@@ -49,11 +49,15 @@ body{
             flex-grow: 1;
             position: relative;
         }
-            #home-link{
+            #header-links{
                 align-self: center;
-                color: #ffffff;
                 grid-area: home;
+                display: flex;
+                gap: 10px;
             }
+                #header-links a{
+                    color: #ffffff;
+                }
             #site-search .search-box{
                 align-self:center;
                 height:25px;
@@ -244,6 +248,40 @@ body{
                 font-size: 0.8125rem;
                 background-color: #000000;
             }
+            .video-item .has-progress .thumbnail-info{
+                bottom: 6px;
+            }
+            .new-badge, .watched-badge{
+                position: absolute;
+                top: 3px;
+                padding: 1px 4px;
+                border-radius: 2px;
+                font-size: 0.6875rem;
+                font-weight: bold;
+                letter-spacing: 0.03em;
+                line-height: 1.3;
+                color: #ffffff;
+            }
+            .new-badge{
+                left: 3px;
+                background-color: #cc0000;
+            }
+            .watched-badge{
+                right: 3px;
+                background-color: rgba(0, 0, 0, 0.8);
+            }
+            .watch-progress{
+                position: absolute;
+                left: 0px;
+                right: 0px;
+                bottom: 0px;
+                height: 4px;
+                background-color: rgba(255, 255, 255, 0.45);
+            }
+                .watch-progress-fill{
+                    height: 100%;
+                    background-color: #ff0000;
+                }
             .playlist-item .thumbnail-info{
                 position: absolute;
                 right: 0px;
@@ -337,9 +375,12 @@ body{
     justify-content: center;
 }
 .page-button-row .page-button{
-    margin-top: 10px;
-    width: 40px;
+    margin: 10px 3px 0px 3px;
+    min-width: 40px;
     height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 .next-previous-button-row{
     margin: 10px 0px;
@@ -350,11 +391,25 @@ body{
 }
     .page-button{
         background-color: var(--interface-color);
-        border-style: outset;
-        border-width: 2px;
+        border: 1px solid rgba(128, 128, 128, 0.6);
+        border-radius: 3px;
         font-weight: bold;
         text-align: center;
         padding: 5px;
+        text-decoration: none;
+    }
+    a.page-button:hover{
+        border-color: rgb(var(--link-color-rgb));
+    }
+    /* The page you're on: filled in, so it can't be mistaken for the
+       pages you've visited (which have the purple visited-link text) */
+    .page-button.current-page{
+        background-color: var(--text-color);
+        border-color: var(--text-color);
+        color: var(--background-color);
+    }
+    .page-button-row .page-step{
+        padding: 5px 12px;
     }
     .next-page:nth-child(2){    /* only if there's also a previous page button */
         margin-left: 10px;

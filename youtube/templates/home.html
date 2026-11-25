@@ -15,7 +15,9 @@
 {% endblock style %}
 {% block main %}
     <ul>
+        {% if local_playlists_enabled %}
         <li><a href="/youtube.com/playlists">Local playlists</a></li>
+        {% endif %}
         <li><a href="/youtube.com/subscriptions">Subscriptions</a></li>
         <li><a href="/youtube.com/subscription_manager">Subscription Manager</a></li>
         <li><a href="/youtube.com/settings">Settings</a></li>

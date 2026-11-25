@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html data-utc-offset="{{ utc_offset_seconds }}" data-ui-style="{{ ui_style }}" data-color-scheme="{{ color_scheme }}">
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -7,7 +7,9 @@
         <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; media-src 'self' blob: https://*.googlevideo.com;
             {{ "img-src 'self' https://*.googleusercontent.com https://*.ggpht.com https://*.ytimg.com;" if not settings.proxy_images else "" }}">
         <link href="/youtube.com/shared.css" type="text/css" rel="stylesheet">
-        <link href="{{ theme_path }}" type="text/css" rel="stylesheet">
+        {% if ui_style == 'classic' %}
+            <link href="{{ theme_path }}" type="text/css" rel="stylesheet">
+        {% endif %}
         <link href="/youtube.com/static/comments.css" type="text/css" rel="stylesheet">
         <link href="/youtube.com/static/favicon.ico" type="image/x-icon" rel="icon">
         <link title="Youtube local" href="/youtube.com/opensearch.xml" rel="search" type="application/opensearchdescription+xml">
@@ -23,15 +25,47 @@
 
         {% block head %}
         {% endblock %}
+
+        {% for sheet in ui_style_sheets %}
+            <link href="{{ sheet }}" type="text/css" rel="stylesheet">
+        {% endfor %}
     </head>
     <body>
+        {%- macro header_logo() -%}
+            {%- if ui_style == 'youtube' -%}
+                <svg class="header-logo" viewBox="0 0 28 20" aria-hidden="true"><rect class="logo-back" x="0.5" y="0.5" width="27" height="19" rx="5.5"/><path class="logo-play" d="M11.2 5.8v8.4l7.1-4.2z"/></svg>
+            {%- else -%}
+                <svg class="header-logo" viewBox="0 0 24 24" aria-hidden="true"><circle class="logo-back" cx="12" cy="12" r="10.5"/><path class="logo-play" d="M9.7 7.6v8.8l7-4.4z"/></svg>
+            {%- endif -%}
+        {%- endmacro -%}
+        {%- macro gear_icon() -%}
+            <svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        {%- endmacro %}
         <header>
                 <form id="site-search" action="/youtube.com/results">
-                    <a href="/youtube.com" id="home-link">Home</a>
+                    <span id="header-links">
+                        {% if ui_style == 'classic' %}
+                            <a href="/youtube.com" id="home-link">Home</a>
+                            <a href="/youtube.com/home" id="menu-link">Menu</a>
+                        {% else %}
+                            {# Opens the side menu (nav-drawer.js). Without JavaScript it
+                               is a plain link to the menu page. #}
+                            <a href="/youtube.com/home" id="menu-link" class="header-icon-button" title="Menu" aria-label="Menu"><svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></a>
+                            <a href="/youtube.com" class="home-link" id="home-link">{{ header_logo() }}<span>Home</span></a>
+                        {% endif %}
+                    </span>
                     <input type="search" name="search_query" class="search-box" value="{{ search_box_value }}"
-                        {{ "autofocus" if (request.path in ("/", "/results") or error_message) else "" }} placeholder="Type to search...">
-                    <button type="submit" value="Search" class="button search-button">Search</button>
-                    <label for="filter-dropdown-toggle-cbox" class="filter-dropdown-toggle-button button">Filter</label>
+                        {{ "autofocus" if (request.path in ("/", "/home", "/results") or error_message) else "" }} placeholder="Type to search...">
+                    {% if ui_style == 'classic' %}
+                        <button type="submit" value="Search" class="button search-button">Search</button>
+                    {% else %}
+                        <button type="submit" value="Search" class="button search-button" title="Search" aria-label="Search"><svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg></button>
+                    {% endif %}
+                    {% if ui_style == 'classic' %}
+                        <label for="filter-dropdown-toggle-cbox" class="filter-dropdown-toggle-button button">Filter</label>
+                    {% else %}
+                        <label for="filter-dropdown-toggle-cbox" class="filter-dropdown-toggle-button header-icon-button" title="Search filters" aria-label="Search filters" tabindex="0" role="button"><svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg></label>
+                    {% endif %}
                     <input id="filter-dropdown-toggle-cbox" type="checkbox" hidden>
                     <div class="filter-dropdown-content">
                         <h3>Sort by</h3>
@@ -101,12 +135,15 @@
                         <label for="duration_long">Long (&gt; 20 minutes)</label>
 
                     </div>
-                    {% if header_playlist_names is defined %}
+                    {% if header_playlist_names is defined and local_playlists_enabled %}
                         <label for="playlist-form-toggle-cbox" class="playlist-form-toggle-button button">+Playlist</label>
+                    {% endif %}
+                    {% if ui_style != 'classic' %}
+                        <a href="/youtube.com/settings" id="settings-link" class="header-icon-button" title="Settings" aria-label="Settings">{{ gear_icon() }}</a>
                     {% endif %}
                 </form>
 
-            {% if header_playlist_names is defined %}
+            {% if header_playlist_names is defined and local_playlists_enabled %}
                 <input id="playlist-form-toggle-cbox" type="checkbox" hidden>
                 <form id="playlist-edit" action="/youtube.com/edit_playlist" method="post" target="_self">
                     <input name="playlist_name" id="playlist-name-selection" list="playlist-options" type="text" placeholder="Playlist name">
@@ -206,10 +243,35 @@
                 </script>
             {% endif %}
         </header>
+        {% if ui_style != 'classic' %}
+            <dialog id="nav-drawer" aria-label="Menu">
+                <div class="drawer-inner">
+                    <div class="drawer-head">
+                        <button type="button" class="header-icon-button drawer-close" title="Close menu" aria-label="Close menu"><svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+                        <a href="/youtube.com" class="home-link">{{ header_logo() }}<span>Home</span></a>
+                    </div>
+                    <nav aria-label="Main">
+                    <ul>
+                        <li><a href="/youtube.com"{{ ' aria-current="page"'|safe if request.path in ('/', '/home') }}><svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9v11h5v-6h4v6h5V9"/></svg><span>Home</span></a></li>
+                        <li><a href="/youtube.com/subscriptions"{{ ' aria-current="page"'|safe if request.path in ('/subscriptions',) }}><svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M6 4.5h12M10.5 11.5v6l5-3z"/></svg><span>Subscriptions</span></a></li>
+                        <li><a href="/youtube.com/subscription_manager"{{ ' aria-current="page"'|safe if request.path in ('/subscription_manager',) }}><svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></svg><span>Subscription manager</span></a></li>
+                        {% if local_playlists_enabled %}
+                        <li><a href="/youtube.com/playlists"{{ ' aria-current="page"'|safe if request.path.startswith('/playlists') }}><svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h12M4 11h12M4 16h7M15 15v6l5-3z"/></svg><span>Local playlists</span></a></li>
+                        {% endif %}
+                    </ul>
+                    <ul>
+                        <li><a href="/youtube.com/settings"{{ ' aria-current="page"'|safe if request.path in ('/settings',) }}>{{ gear_icon() }}<span>Settings</span></a></li>
+                    </ul>
+                    </nav>
+                </div>
+            </dialog>
+            <script src="/youtube.com/static/js/nav-drawer.js" defer></script>
+        {% endif %}
         <main>
 {% block main %}
 {{ main }}
 {% endblock %}
         </main>
+        <script src="/youtube.com/static/js/watch-progress.js"></script>
     </body>
 </html>

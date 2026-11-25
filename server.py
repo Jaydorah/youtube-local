@@ -7,7 +7,8 @@ from youtube import yt_app
 from youtube import util
 
 # these are just so the files get run - they import yt_app and add routes to it
-from youtube import watch, search, playlist, channel, local_playlist, comments, subscriptions
+from youtube import (watch, search, playlist, channel, local_playlist,
+                     comments, subscriptions, watch_progress)
 
 import settings
 
@@ -270,13 +271,30 @@ class FilteredRequestLog:
         if not self.filter_re.search(s):
             sys.stderr.write(s)
 
+class NoDelayWSGIServer(WSGIServer):
+    '''Disables Nagle's algorithm on client connections.
+
+    gevent writes the response headers and the response body to the socket
+    separately. With Nagle's algorithm on, a body smaller than one TCP segment
+    (about 64 KB on the loopback interface) is held back until the browser
+    acknowledges the headers, and the browser's OS delays that acknowledgement
+    by about 40 ms. That stalled every page, stylesheet and thumbnail sent
+    over a reused connection.'''
+    def handle(self, sock, address):
+        try:
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except OSError:
+            # The client already disconnected. Let the handler deal with it
+            pass
+        super().handle(sock, address)
+
 if __name__ == '__main__':
     if settings.allow_foreign_addresses:
-        server = WSGIServer(('0.0.0.0', settings.port_number), site_dispatch,
-                            log=FilteredRequestLog())
+        server = NoDelayWSGIServer(('0.0.0.0', settings.port_number),
+                                   site_dispatch, log=FilteredRequestLog())
     else:
-        server = WSGIServer(('127.0.0.1', settings.port_number), site_dispatch,
-                            log=FilteredRequestLog())
+        server = NoDelayWSGIServer(('127.0.0.1', settings.port_number),
+                                   site_dispatch, log=FilteredRequestLog())
     print('Started httpserver on port' , settings.port_number)
     server.serve_forever()
 

@@ -1,0 +1,333 @@
+/* YouTube style, loaded on top of modern_ui.css: flat, with no cards, round
+   thumbnails, pill-shaped buttons and YouTube's colors. */
+
+html{
+    --radius: 12px;
+    --radius-small: 8px;
+    --control-radius: 18px;
+    --search-radius: 40px;
+    --thumbnail-radius: 12px;
+    --ui-font: "Roboto", "Noto Sans", "Liberation Sans", Arial, sans-serif;
+
+    --background-color: #ffffff;
+    --interface-color: #ffffff;
+    --popup-background: #ffffff;
+    --surface-2: #f2f2f2;
+    --surface-3: #e5e5e5;
+    --text-color: #0f0f0f;
+    --text-secondary: #606060;
+    --border-color: #e5e5e5;
+    --search-border: #c6c6c6;
+    --search-button-background: #f8f8f8;
+    --accent: #065fd4;
+    --accent-rgb: 6, 95, 212;
+    --brand: #e00000;
+    --primary-background: #0f0f0f;
+    --primary-text: #ffffff;
+    --link-color-rgb: 6, 95, 212;
+    --visited-link-color-rgb: 6, 95, 212;
+    --header-background: #ffffff;
+    --header-border: transparent;
+    --card-shadow: none;
+    --popup-shadow: 0 4px 32px rgba(0, 0, 0, 0.1), 0 1px 4px rgba(0, 0, 0, 0.1);
+    --switch-off: #909090;
+}
+
+html[data-color-scheme="dark"]{
+    --background-color: #0f0f0f;
+    --interface-color: #0f0f0f;
+    --popup-background: #282828;
+    --surface-2: #272727;
+    --surface-3: #3f3f3f;
+    --text-color: #f1f1f1;
+    --text-secondary: #aaaaaa;
+    --border-color: #303030;
+    --search-border: #303030;
+    --search-button-background: #222222;
+    --accent: #3ea6ff;
+    --accent-rgb: 62, 166, 255;
+    --primary-background: #f1f1f1;
+    --primary-text: #0f0f0f;
+    --link-color-rgb: 62, 166, 255;
+    --visited-link-color-rgb: 62, 166, 255;
+    --header-background: #0f0f0f;
+    --popup-shadow: 0 4px 32px rgba(0, 0, 0, 0.6);
+    --switch-off: #717171;
+    --card-shadow: none;
+}
+@media (prefers-color-scheme: dark){
+    html[data-color-scheme="system"]{
+        --background-color: #0f0f0f;
+        --interface-color: #0f0f0f;
+        --popup-background: #282828;
+        --surface-2: #272727;
+        --surface-3: #3f3f3f;
+        --text-color: #f1f1f1;
+        --text-secondary: #aaaaaa;
+        --border-color: #303030;
+        --search-border: #303030;
+        --search-button-background: #222222;
+        --accent: #3ea6ff;
+        --accent-rgb: 62, 166, 255;
+        --primary-background: #f1f1f1;
+        --primary-text: #0f0f0f;
+        --link-color-rgb: 62, 166, 255;
+        --visited-link-color-rgb: 62, 166, 255;
+        --header-background: #0f0f0f;
+        --popup-shadow: 0 4px 32px rgba(0, 0, 0, 0.6);
+        --switch-off: #717171;
+    --card-shadow: none;
+    }
+}
+
+body{
+    -webkit-font-smoothing: auto;
+}
+
+/* Buttons: borderless pills */
+.button,
+button:not(.plyr__control),
+input[type="submit"],
+input[type="reset"],
+input[type="button"]{
+    border-color: transparent;
+}
+.page-button{
+    border-color: transparent;
+    background-color: var(--surface-2);
+    border-radius: var(--control-radius);
+}
+a.page-button:link, a.page-button:visited{
+    color: var(--text-color);
+}
+a.page-button:hover{
+    border-color: transparent;
+    background-color: var(--surface-3);
+}
+.sort-button{
+    border-radius: var(--radius-small);
+}
+
+/* Header: same layout as YouTube's top bar */
+    #site-search .search-box{
+        border-color: var(--search-border);
+        padding-left: 18px;
+    }
+    #site-search .search-box:focus{
+        border-color: var(--accent);
+    }
+    #site-search .search-button{
+        width: 64px;
+        border-color: var(--search-border);
+        background-color: var(--search-button-background);
+    }
+    #site-search .search-button:hover{
+        background-color: var(--surface-2);
+    }
+    /* the filter button sits where YouTube's microphone button is: a
+       filled circle beside the search box */
+    #site-search .filter-dropdown-toggle-button{
+        margin-left: 12px;
+        background-color: var(--surface-2);
+    }
+    #site-search .filter-dropdown-toggle-button:hover,
+    #site-search .filter-dropdown-toggle-button[aria-expanded="true"]{
+        background-color: var(--surface-3);
+    }
+    .home-link{
+        gap: 6px;
+        padding-left: 12px;
+        font-size: 1.15rem;
+        letter-spacing: -0.03em;
+    }
+        .header-logo{
+            width: 29px;
+            height: 20px;
+        }
+
+    /* Side menu */
+    #nav-drawer{
+        width: 256px;
+        box-shadow: none;
+    }
+        #nav-drawer ul{
+            padding: 12px 0px;
+        }
+            #nav-drawer li a{
+                gap: 24px;
+                border-radius: 10px;
+            }
+            #nav-drawer li a[aria-current="page"]{
+                background-color: var(--surface-2);
+                font-weight: 500;
+            }
+            #nav-drawer li a[aria-current="page"]:hover{
+                background-color: var(--surface-3);
+            }
+                #nav-drawer li a[aria-current="page"] .header-icon{
+                    color: inherit;
+                }
+
+/* Videos: no card backgrounds */
+.item{
+    background-color: transparent;
+    border-radius: 0px;
+    overflow: visible;
+}
+    .item .title{
+        font-weight: 500;
+        font-size: 1rem;
+    }
+    .item a.title:visited{
+        color: var(--text-color);
+    }
+    .item-metadata{
+        padding: 0px 0px 0px 12px;
+    }
+    .item-grid .item-metadata{
+        padding: 12px 0px 0px 0px;
+    }
+    .item-grid .item-checkbox{
+        right: 0px;
+        bottom: 0px;
+    }
+    .side-videos .item-metadata{
+        padding-left: 8px;
+    }
+        .side-videos .item .title{
+            font-size: 0.875rem;
+        }
+
+.item-grid{
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr));
+    gap: 36px 16px;
+}
+.item-list{
+    grid-row-gap: 16px;
+}
+
+/* Search results: bigger thumbnails */
+@media (min-width:601px){
+    .has-description.horizontal-item-box .thumbnail-box{
+        width: clamp(246px, 40vw, 360px);
+        height: auto;
+        aspect-ratio: 16 / 9;
+    }
+}
+.item .description{
+    font-size: 0.75rem;
+    margin-top: 8px;
+}
+
+/* Playlists and menus */
+main > .playlist-metadata{
+    border: none;
+    background-color: var(--surface-2);
+}
+main > ul{
+    border: none;
+    background-color: var(--surface-2);
+}
+    main > ul > li > a:hover{
+        background-color: var(--surface-3);
+    }
+
+/* Settings */
+.settings-section{
+    border: none;
+    background-color: var(--surface-2);
+}
+    .setting-item{
+        border-top-color: var(--border-color);
+    }
+    .setting-control select,
+    .setting-control input[type="number"],
+    .setting-control input[type="text"]{
+        border-radius: var(--radius-small);
+        background-color: var(--background-color);
+    }
+
+/* Channel */
+.channel-metadata .summary .title{
+    font-size: 2.25rem;
+}
+.channel-metadata .avatar{
+    width: 160px;
+    height: 160px;
+}
+
+/* Subscriptions */
+.feed-filters{
+    border: none;
+    background-color: var(--surface-2);
+}
+.subscriptions-sidebar{
+    border-left-color: transparent;
+}
+.import-export, .sub-panel{
+    border: none;
+    background-color: var(--surface-2);
+}
+.sub-list-controls, .selection-bar, .sub-list-item{
+    border-bottom-color: var(--background-color);
+}
+.tag-group-name{
+    background-color: var(--surface-3);
+}
+.sub-list-item:hover{
+    background-color: var(--surface-3);
+}
+.tag, .muted-badge{
+    background-color: var(--background-color);
+}
+
+/* Watch page */
+details > summary,
+.more-info > summary{
+    border-color: transparent;
+    background-color: var(--surface-2);
+    border-radius: var(--radius-small);
+}
+details > summary:hover,
+.more-info > summary:hover{
+    background-color: var(--surface-3);
+}
+.video-info > .title{
+    font-size: 1.25rem;
+}
+.description-dropdown .description{
+    border: none;
+    background-color: var(--surface-2);
+    font-size: 0.875rem;
+}
+.download-dropdown-content{
+    border: none;
+    background-color: var(--surface-2);
+}
+.download-link{
+    background-color: var(--background-color);
+}
+.download-link:visited{
+    background-color: var(--background-color);
+}
+.playlist{
+    border: none;
+    background-color: var(--surface-2);
+}
+    .playlist-header{
+        border-bottom-color: var(--surface-3);
+    }
+.chapters-list, div#transcript-div{
+    border: none;
+    background-color: var(--surface-2);
+}
+.comments-disabled{
+    border: none;
+    background-color: var(--surface-2);
+}
+.comment .author-name a:link, .comment .author-name a:visited{
+    font-weight: 500;
+}
+.comment .text{
+    font-size: 0.875rem;
+}

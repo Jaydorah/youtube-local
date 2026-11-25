@@ -1,6 +1,8 @@
 import youtube
 from youtube import yt_app
 from youtube import util, comments, local_playlist, yt_data_extract
+from youtube import watch_progress, subscriptions
+from youtube.chapters import parse_chapters
 import settings
 
 from flask import request
@@ -14,6 +16,8 @@ import math
 import traceback
 import urllib
 import re
+import time
+import datetime
 import urllib3.exceptions
 from urllib.parse import parse_qs, urlencode
 from types import SimpleNamespace
@@ -25,6 +29,51 @@ try:
         decrypt_cache = json.loads(f.read())['decrypt_cache']
 except FileNotFoundError:
     decrypt_cache = {}
+
+
+def parse_publish_time(time_published):
+    '''YouTube gives the publish time in its own timezone, e.g.
+    2026-11-14T09:00:05-08:00, or sometimes only the date (2026-11-14).
+    Returns (unix time, precision) for time_display.date_time, or
+    (None, None) if it can't be read.'''
+    if not isinstance(time_published, str):
+        return None, None
+    try:
+        published = datetime.datetime.fromisoformat(time_published)
+    except ValueError:
+        published = None
+    if published is not None and published.tzinfo is not None:
+        return int(published.timestamp()), 'exact'
+    match = re.fullmatch(r'(\d{4})-(\d{1,2})-(\d{1,2})', time_published)
+    if match:
+        year, month, day = (int(part) for part in match.groups())
+        # Noon UTC falls on the same day in nearly every timezone
+        noon = datetime.datetime(year, month, day, 12,
+                                 tzinfo=datetime.timezone.utc)
+        return int(noon.timestamp()), 'date'
+    return None, None
+
+
+# How long loading the watch page waits for the dislike count
+DISLIKES_WAIT_SECONDS = 2
+
+
+def fetch_dislike_count(video_id):
+    '''YouTube stopped giving out the dislike count in 2021. Return YouTube
+    Dislike estimates it from the users of its browser extension.
+    Returns None if it can't be fetched.'''
+    try:
+        content = util.fetch_url(
+            'https://returnyoutubedislikeapi.com/votes?'
+            + urlencode({'videoId': video_id}),
+            # it refuses the default Python user agent
+            headers=util.desktop_ua,
+            timeout=5, debug_name='dislikes',
+            report_text='Fetched dislike count')
+        return int(json.loads(content)['dislikes'])
+    except Exception as e:
+        print('Could not fetch the dislike count:', repr(e))
+        return None
 
 
 def codec_name(vcodec):
@@ -573,11 +622,15 @@ def get_watch_page(video_id=None):
             time_start += int(match.group(1))*time_table[match.group(2)]
     elif re.fullmatch(r'\d+', time_start_str):
         time_start = int(time_start_str)
+    if 't' not in request.args:
+        # pick up where the user left off
+        time_start = watch_progress.resume_position(video_id)
 
     lc = request.args.get('lc', '')
     playlist_id = request.args.get('list')
     index = request.args.get('index')
     use_invidious = bool(int(request.args.get('use_invidious', '1')))
+    dislikes_task = None
     if request.path.startswith('/embed') and settings.embed_page_mode:
         tasks = (
             gevent.spawn((lambda: {})),
@@ -591,12 +644,21 @@ def get_watch_page(video_id=None):
             gevent.spawn(extract_info, video_id, use_invidious,
                          playlist_id=playlist_id, index=index),
         )
+        if settings.use_return_youtube_dislike:
+            dislikes_task = gevent.spawn(fetch_dislike_count, video_id)
     gevent.joinall(tasks)
     util.check_gevent_exceptions(tasks[1])
     comments_info, info = tasks[0].value, tasks[1].value
 
     if info['error']:
         return flask.render_template('error.html', error_message = info['error'])
+
+    if dislikes_task is not None and info.get('dislike_count') is None:
+        # It has had as long as the video's info took, so it's usually
+        # there already. The page isn't held up for it beyond this.
+        dislikes_task.join(timeout=DISLIKES_WAIT_SECONDS)
+        info['dislike_count'] = dislikes_task.value
+        dislikes_task.kill(block=False)
 
     video_info = {
         'duration':  util.seconds_to_timestamp(info['duration'] or 0),
@@ -733,6 +795,13 @@ def get_watch_page(video_id=None):
             'url': transcript_url
         })
 
+    published_timestamp, published_precision = parse_publish_time(
+        info['time_published'])
+    subscriptions.save_watch_page_time(video_id, published_timestamp,
+                                       published_precision)
+
+    chapters = parse_chapters(info['description'], info['duration'])
+
     if request.path.startswith('/embed') and settings.embed_page_mode:
         template_name = 'embed.html'
     else:
@@ -741,6 +810,8 @@ def get_watch_page(video_id=None):
         header_playlist_names   = local_playlist.get_playlist_names(),
         uploader_channel_url    = ('/' + info['author_url']) if info['author_url'] else '',
         time_published             = info['time_published'],
+        published_timestamp        = published_timestamp,
+        published_precision        = published_precision,
         view_count    = (lambda x: '{:,}'.format(x) if x is not None else "")(info.get("view_count", None)),
         like_count    = (lambda x: '{:,}'.format(x) if x is not None else "")(info.get("like_count", None)),
         dislike_count = (lambda x: '{:,}'.format(x) if x is not None else "")(info.get("dislike_count", None)),
@@ -764,6 +835,7 @@ def get_watch_page(video_id=None):
         title       = info['title'],
         uploader    = info['author'],
         description = info['description'],
+        chapters    = chapters,
         unlisted    = info['unlisted'],
         limited_state = info['limited_state'],
         age_restricted    = info['age_restricted'],
@@ -783,6 +855,7 @@ def get_watch_page(video_id=None):
         js_data = {
             'video_id': info['id'],
             'video_duration': info['duration'],
+            'chapters': chapters,
             'settings': settings.current_settings_dict,
             'has_manual_captions': any(s.get('on') for s in subtitle_sources),
             **source_info,

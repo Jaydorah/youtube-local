@@ -7,7 +7,74 @@ import collections
 import flask
 from flask import request
 
+# Hides the local playlists UI: the +Playlist button, the checkboxes on
+# videos, the home menu link and the homepage option. Set to True to bring
+# it back.
+local_playlists_enabled = False
+
 SETTINGS_INFO = collections.OrderedDict([
+    ('ui_style', {
+        'type': int,
+        'default': 1,
+        'label': 'Style',
+        'comment': '''0 - Classic: the original look
+1 - Modern: rounded cards, a sticky header and a grid of videos
+2 - YouTube: laid out like youtube.com''',
+        'options': [
+            (0, 'Classic'),
+            (1, 'Modern'),
+            (2, 'YouTube'),
+        ],
+        'category': 'appearance',
+        'description': 'Classic is the original look, and keeps its own color and font settings.',
+    }),
+
+    ('color_scheme', {
+        'type': int,
+        'default': 0,
+        'comment': '''Colors for the Modern and YouTube styles
+0 - Follow the system (light or dark, whichever your browser or OS is set to)
+1 - Light
+2 - Dark''',
+        'options': [
+            (0, 'Same as system'),
+            (1, 'Light'),
+            (2, 'Dark'),
+        ],
+        'category': 'appearance',
+        'shown_for': ('ui_style', (1, 2)),
+    }),
+
+    ('theme', {
+        'type': int,
+        'default': 0,
+        'label': 'Classic theme',
+        'comment': '',
+        'options': [
+            (0, 'Light'),
+            (1, 'Gray'),
+            (2, 'Dark'),
+        ],
+        'category': 'appearance',
+        'shown_for': ('ui_style', (0,)),
+    }),
+
+    ('font', {
+        'type': int,
+        'default': 1,
+        'label': 'Classic font',
+        'comment': '',
+        'options': [
+            (0, 'Browser default'),
+            (1, 'Arial'),
+            (2, 'Liberation Serif'),
+            (3, 'Verdana'),
+            (4, 'Tahoma'),
+        ],
+        'category': 'appearance',
+        'shown_for': ('ui_style', (0,)),
+    }),
+
     ('route_tor', {
         'type': int,
         'default': 0,
@@ -122,6 +189,15 @@ Defaults to -1, which means no default value is forced and the browser will set 
         'category': 'interface',
     }),
 
+    ('expand_description', {
+        'label': 'Show description by default',
+        'type': bool,
+        'default': True,
+        'comment': '''On: the description under a video is open.
+Off: it's closed until its bar is clicked, like the download list''',
+        'category': 'interface',
+    }),
+
     ('enable_comment_avatars', {
         'type': bool,
         'default': True,
@@ -142,8 +218,9 @@ Defaults to -1, which means no default value is forced and the browser will set 
 
     ('theater_mode', {
         'type': bool,
-        'default': True,
-        'comment': '',
+        'default': False,
+        'comment': '''On: the video goes across the whole window, with the info and related videos below it.
+Off: like YouTube's default view, with the related videos to the right of the video''',
         'category': 'interface',
     }),
 
@@ -259,29 +336,54 @@ Defaults to -1, which means no default value is forced and the browser will set 
         'category': 'playback',
     }),
 
-    ('theme', {
+    ('use_return_youtube_dislike', {
+        'label': 'Show dislikes',
+        'type': bool,
+        'default': True,
+        'comment': '''YouTube no longer gives out the number of dislikes. With this on, it's
+fetched from returnyoutubedislike.com, which estimates it. That site is
+sent the id of each video you open.''',
+        'category': 'interface',
+    }),
+
+    ('homepage', {
         'type': int,
         'default': 0,
-        'comment': '',
+        'label': 'Default homepage',
+        'comment': '''Page opened at the root address (for example localhost:8080)
+0 - Home menu
+1 - Subscriptions
+2 - Local playlists''',
         'options': [
-            (0, 'Light'),
-            (1, 'Gray'),
-            (2, 'Dark'),
+            (0, 'Home menu'),
+            (1, 'Subscriptions'),
+            (2, 'Local playlists'),
+        ] if local_playlists_enabled else [
+            (0, 'Home menu'),
+            (1, 'Subscriptions'),
         ],
         'category': 'interface',
     }),
 
-    ('font', {
+    ('utc_offset_hours', {
         'type': int,
-        'default': 1,
-        'comment': '',
-        'options': [
-            (0, 'Browser default'),
-            (1, 'Arial'),
-            (2, 'Liberation Serif'),
-            (3, 'Verdana'),
-            (4, 'Tahoma'),
-        ],
+        'default': 0,
+        'max': 14,
+        'min': -12,
+        'label': 'Timezone: hours from UTC',
+        'comment': '''Upload dates and times are shown in UTC shifted by this many hours.
+For example -5 for New York in winter, 1 for Berlin in winter''',
+        'category': 'interface',
+    }),
+
+    ('utc_offset_minutes', {
+        'type': int,
+        'default': 0,
+        'max': 59,
+        'min': 0,
+        'label': 'Timezone: extra minutes',
+        'comment': '''Added to the hours above, in the same direction (for example 30 with 5 hours
+for India, or 30 with -3 hours for Newfoundland)''',
         'category': 'interface',
     }),
 
@@ -318,7 +420,7 @@ Defaults to -1, which means no default value is forced and the browser will set 
 
     ('settings_version', {
         'type': int,
-        'default': 6,
+        'default': 7,
         'comment': '''Do not change, remove, or comment out this value, or else your settings may be lost or corrupted''',
         'hidden': True,
     }),
@@ -397,12 +499,24 @@ def upgrade_to_6(settings_dict):
     new_settings['settings_version'] = 6
     return new_settings
 
+def upgrade_to_7(settings_dict):
+    '''Keep dark mode for people who had the Dark theme when the new styles,
+    which have their own light/dark setting, became the default'''
+    new_settings = settings_dict.copy()
+    if settings_dict.get('theme') == 2:
+        new_settings['color_scheme'] = 2
+    elif 'theme' in settings_dict:
+        new_settings['color_scheme'] = 1
+    new_settings['settings_version'] = 7
+    return new_settings
+
 upgrade_functions = {
     1: upgrade_to_2,
     2: upgrade_to_3,
     3: upgrade_to_4,
     4: upgrade_to_5,
     5: upgrade_to_6,
+    6: upgrade_to_7,
 }
 
 def log_ignored_line(line_number, message):
@@ -540,15 +654,42 @@ set_img_prefix()
 add_setting_changed_hook('proxy_images', set_img_prefix)
 
 
-categories = ['network', 'interface', 'playback', 'other']
+categories = ['appearance', 'interface', 'playback', 'network', 'other']
+
+def is_setting_shown(setting_info, values):
+    '''Whether a setting applies, given the values of the other settings.
+    'shown_for': (other_setting, values_it_applies_for)'''
+    if setting_info.get('hidden', False):
+        return False
+    if 'shown_for' not in setting_info:
+        return True
+    other_setting, applies_for = setting_info['shown_for']
+    return values[other_setting] in applies_for
+
+def setting_help(setting_info):
+    '''Text under a setting's name. Comments of settings with options just
+    repeat the options, so those are left out.'''
+    if 'description' in setting_info:
+        return setting_info['description']
+    if 'options' in setting_info:
+        return ''
+    return ' '.join(setting_info['comment'].splitlines())
+
 def settings_page():
     if request.method == 'GET':
         settings_by_category = {categ: [] for categ in categories}
         for setting_name, setting_info in SETTINGS_INFO.items():
+            if setting_info.get('hidden', False):
+                continue
             categ = setting_info.get('category', 'other')
-            settings_by_category[categ].append(
-                (setting_name, setting_info, current_settings_dict[setting_name])
-            )
+            settings_by_category[categ].append({
+                'name': setting_name,
+                'info': setting_info,
+                'value': current_settings_dict[setting_name],
+                'help': setting_help(setting_info),
+                'shown': is_setting_shown(setting_info,
+                                          current_settings_dict),
+            })
         return flask.render_template('settings.html',
             categories = categories,
             settings_by_category = settings_by_category,

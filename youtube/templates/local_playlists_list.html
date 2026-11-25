@@ -23,6 +23,8 @@ main{
     <ul>
         {% for playlist_name, playlist_url in playlists %}
             <li><a href="{{ playlist_url }}">{{ playlist_name }}</a></li>
+        {% else %}
+            <li class="no-playlists">No local playlists yet. Tick videos and use "Add to playlist" at the top of the page to make one.</li>
         {% endfor %}
     </ul>
 {% endblock main %}

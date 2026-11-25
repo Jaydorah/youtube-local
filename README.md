@@ -1,71 +1,78 @@
 # youtube-local
 
-![screenshot](https://user-images.githubusercontent.com/28744867/64483429-8a890780-d1b6-11e9-8423-6956ff7c588d.png)
+![Modern style, subscriptions feed](screenshots/modern-subscriptions.png)
+
+This is a fork of [user234683/youtube-local](https://github.com/user234683/youtube-local) with a new interface, a reworked subscriptions feed, chapters, watch progress and more YouTube-style player controls. See [Added in this fork](#added-in-this-fork).
+
 youtube-local is a browser-based client written in Python for watching Youtube anonymously and without the lag of the slow page used by Youtube. One of the primary features is that all requests are routed through Tor, except for the video file at googlevideo.com. This is analogous to what HookTube (defunct) and Invidious do, except that you do not have to trust a third-party to respect your privacy. The assumption here is that Google won't put the effort in to incorporate the video file requests into their tracking, as it's not worth pursuing the incredibly small number of users who care about privacy (Tor video routing is also provided as an option). Tor has high latency, so this will not be as fast network-wise as regular Youtube. However, using Tor is optional; when not routing through Tor, video pages may load faster than they do with Youtube's page depending on your browser.
 
 The Youtube API is not used, so no keys or anything are needed. It uses the same requests as the Youtube webpage.
 
 ## Screenshots
-[Gray theme](https://user-images.githubusercontent.com/28744867/64483431-8e1c8e80-d1b6-11e9-999c-14d36ddd582f.png)
 
-[Dark theme](https://user-images.githubusercontent.com/28744867/64483432-8fe65200-d1b6-11e9-90bd-32869542e32e.png)
+**Modern style, dark:** watch page with chapters, the current chapter next to the time, and the dislike count
 
-[Non-Theater mode](https://user-images.githubusercontent.com/28744867/64483433-92e14280-d1b6-11e9-9b56-2ef5d64c372f.png)
+![Modern style, dark, watch page](screenshots/modern-watch-dark.png)
 
-[Channel](https://user-images.githubusercontent.com/28744867/64483436-95dc3300-d1b6-11e9-8efc-b19b1f1f3bcf.png)
+**YouTube style:** laid out like youtube.com
 
-[Downloads](https://user-images.githubusercontent.com/28744867/64483437-a2608b80-d1b6-11e9-9e5a-4114391b7304.png)
+![YouTube style, subscriptions feed](screenshots/youtube-subscriptions.png)
 
-## Features
-* Standard pages of Youtube: search, channels, playlists
-* Anonymity from Google's tracking by routing requests through Tor
-* Local playlists: These solve the two problems with creating playlists on Youtube: (1) they're datamined and (2) videos frequently get deleted by Youtube and lost from the playlist, making it very difficult to find a reupload as the title of the deleted video is not displayed.
-* Themes: Light, Gray, and Dark
-* Subtitles
-* Easily download videos or their audio
-* No ads
-* View comments
-* Javascript not required
-* Theater and non-theater mode
-* Subscriptions that are independent from Youtube
-  * Can import subscriptions from Youtube
-  * Works by checking channels individually
-  * Can be set to automatically check channels.
-  * For efficiency of requests, frequency of checking is based on how quickly channel posts videos
-  * Can mute channels, so as to have a way to "soft" unsubscribe. Muted channels won't be checked automatically or when using the "Check all" button. Videos from these channels will be hidden.
-  * Can tag subscriptions to organize them or check specific tags
-* Fast page
-  * No distracting/slow layout rearrangement
-  * No lazy-loading of comments; they are ready instantly.
-* Settings allow fine-tuned control over when/how comments or related videos are shown:
-  1. Shown by default, with click to hide
-  2. Hidden by default, with click to show
-  3. Never shown
-* Optionally skip sponsored segments using [SponsorBlock](https://github.com/ajayyy/SponsorBlock)'s API
-* Custom video speeds
-* Video transcript
-* Supports all available video qualities: 144p through 2160p
+![YouTube style, watch page](screenshots/youtube-watch.png)
 
-## Planned features
-- [ ] Putting videos from subscriptions or local playlists into the related videos
-- [x] Information about video (geographic regions, region of Tor exit node, etc)
-- [ ] Ability to delete playlists
-- [ ] Auto-saving of local playlist videos
-- [ ] Import youtube playlist into a local playlist
-- [ ] Rearrange items of local playlist
-- [x] Video qualities other than 360p and 720p by muxing video and audio
-- [ ] Corrected .m4a downloads
-- [x] Indicate if comments are disabled
-- [x] Indicate how many comments a video has
-- [ ] Featured channels page
-- [ ] Channel comments
-- [x] Video transcript
-- [x] Automatic Tor circuit change when blocked
-- [x] Support &t parameter
-- [ ] Subscriptions: Option to mark what has been watched
-- [ ] Subscriptions: Option to filter videos based on keywords in title or description
-- [ ] Subscriptions: Delete old entries and thumbnails
-- [ ] Support for more sites, such as Vimeo, Dailymotion, LBRY, etc.
+**Settings**, grouped by category, with options that only show when they apply
+
+![Settings page](screenshots/settings.png)
+
+The original look is still there as the Classic style: [Gray theme](https://user-images.githubusercontent.com/28744867/64483431-8e1c8e80-d1b6-11e9-999c-14d36ddd582f.png), [Dark theme](https://user-images.githubusercontent.com/28744867/64483432-8fe65200-d1b6-11e9-90bd-32869542e32e.png), [Channel](https://user-images.githubusercontent.com/28744867/64483436-95dc3300-d1b6-11e9-8efc-b19b1f1f3bcf.png), [Downloads](https://user-images.githubusercontent.com/28744867/64483437-a2608b80-d1b6-11e9-9e5a-4114391b7304.png)
+
+## Added in this fork
+
+### Interface
+* Three styles, picked under Settings → Appearance:
+  * **Modern** (the new default): rounded cards, a sticky header and a grid of videos
+  * **YouTube**: flat and laid out like youtube.com, with YouTube's colors and pill-shaped buttons
+  * **Classic**: the original look, with its own Light/Gray/Dark themes and font choice
+* Light and dark color schemes for the Modern and YouTube styles, or follow the system setting
+* A side menu behind the ☰ button in the header. It's a dialog that closes with Escape, and still works as a plain link without JavaScript
+* Redesigned settings page: grouped into Appearance, Interface, Playback, Network and Other, with toggle switches, a short explanation under each setting, and settings that don't apply to the chosen style hidden
+* Choose which page opens at the root address: the home menu or subscriptions
+* Local playlists are hidden by default. Set `local_playlists_enabled = True` at the top of `settings.py` to bring them back
+* Theater mode is now off by default, so related videos sit to the right of the video like on YouTube
+
+### Watch page
+* **Chapters**, read from the timestamps in the description. The list in the sidebar seeks when clicked and highlights the chapter playing. The seek bar is split where chapters start, hovering it shows the chapter's name, and the current chapter is shown next to the time
+* **Watch progress**: thumbnails everywhere show a bar for how far you got, and opening a video again resumes where you left off (a few seconds earlier, to catch up). `&t=` in the URL still takes priority
+* **Dislike counts** from [Return YouTube Dislike](https://returnyoutubedislike.com/). It can be turned off in settings; when on, that site is sent the id of each video you open
+* Exact upload date and time, as well as "9 years ago"
+* Option to have the description collapsed until clicked
+* Fixed videos freezing after seeking into a part that isn't buffered yet, mostly in Firefox
+
+### Hotkeys
+Closer to YouTube's:
+* `Space` / `K` play and pause, `J` / `L` back and forward 10 seconds, `←` / `→` 5 seconds
+* `↑` / `↓` change the volume by 5%, with the level shown over the video
+* `0`–`9` jump to 0–90% of the video
+* `,` / `.` pause and step one frame back or forward
+* `Ctrl+←` / `Ctrl+→` previous and next chapter
+* `F` fullscreen, `C` captions, `T` copy a link at the current time
+
+### Subscriptions
+* The feed is sorted by upload time, newest first, instead of by when a check found the video
+* Each video shows how long ago it was uploaded and the exact date and time. "3 days ago" stays current while the page is open
+* Videos uploaded in the last 12 hours get a **NEW** badge
+* Hide watched videos, regular videos, livestreams & VODs, or shorts with checkboxes at the top. The choice is remembered
+* Shorts and livestreams are told apart from regular videos when channels are checked
+* Checking runs in the background: the Check buttons don't leave the page, and a box shows how many channels are done and how many videos were found
+* Checks are cheaper: each channel's RSS feed is read first, and the bigger requests are only made when it shows something new. Estimated upload times ("2 weeks ago") are narrowed down and corrected as exact times come in
+* The sidebar can be hidden, and stays hidden
+* Redesigned subscription manager, with filtering and grouping by tag
+* Database indexes so the feed and checks don't read the whole videos table on every page load
+
+### Other
+* Times are shown in a timezone set in settings (hours and minutes from UTC), so they don't depend on the server's timezone
+* Pages load faster on reused connections (TCP_NODELAY on the server), and more connections are kept open per host, so thumbnails and video streams don't each start a new TLS connection
+* Tests for chapters, the feed, watch progress and the styles in `tests/`
 
 ## Installing
 

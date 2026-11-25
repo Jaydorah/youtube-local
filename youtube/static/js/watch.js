@@ -1,5 +1,13 @@
 var video = document.querySelector('video');
 
+// Frames per second of the quality that's playing, for stepping one frame
+// at a time in hotkeys.js
+var videoFps = null;
+if (data.using_pair_sources && data.pair_sources[data.pair_idx])
+    videoFps = data.pair_sources[data.pair_idx].fps;
+else if (data.uni_sources && data.uni_sources[data.uni_idx])
+    videoFps = data.uni_sources[data.uni_idx].fps;
+
 function setVideoDimensions(height, width){
     var body = document.querySelector('body');
     body.style.setProperty('--video_height', String(height));
@@ -29,6 +37,7 @@ function changeQuality(selection) {
         avMerge = new AVMerge(video, srcInfo, currentVideoTime);
     }
     setVideoDimensions(srcInfo.height, srcInfo.width);
+    videoFps = srcInfo.fps;
     video.currentTime = currentVideoTime;
     if (!videoPaused){
         video.play();
@@ -55,18 +64,6 @@ if (qualitySelector)
 // Set up video start time from &t parameter
 if (data.time_start != 0 && video)
     video.currentTime = data.time_start;
-
-// External video speed control
-var speedInput = document.querySelector('#speed-control');
-speedInput.addEventListener('keyup', (event) => {
-    if (event.key === 'Enter') {
-        var speed = parseFloat(speedInput.value);
-        if(!isNaN(speed)){
-            video.playbackRate = speed;
-        }
-    }
-});
-
 
 // Playlist lazy image loading
 if (data.playlist && data.playlist['id'] !== null) {

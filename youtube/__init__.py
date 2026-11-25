@@ -1,10 +1,12 @@
 from youtube import util
+from youtube import time_display
 import flask
 from flask import request
 import jinja2
 import settings
 import traceback
 import re
+import time
 from sys import exc_info
 yt_app = flask.Flask(__name__)
 yt_app.url_map.strict_slashes = False
@@ -14,10 +16,29 @@ yt_app.url_map.strict_slashes = False
 # https://stackoverflow.com/questions/39858191/do-statement-not-working-in-jinja
 yt_app.jinja_env.add_extension('jinja2.ext.do') # why
 
+# A global so that macros imported without context can see it too
+yt_app.jinja_env.globals['local_playlists_enabled'] = settings.local_playlists_enabled
+
 yt_app.add_url_rule('/settings', 'settings_page', settings.settings_page, methods=['POST', 'GET'])
+
+HOMEPAGE_PATHS = {
+    1: '/youtube.com/subscriptions',
+    2: '/youtube.com/playlists',
+}
 
 @yt_app.route('/')
 def homepage():
+    target = HOMEPAGE_PATHS.get(settings.homepage)
+    if target == HOMEPAGE_PATHS[2] and not settings.local_playlists_enabled:
+        target = None
+    if target:
+        return flask.redirect(target, 302)
+    return home_menu()
+
+# The menu stays reachable here whatever the homepage setting is, because it
+# holds the only link to the settings page
+@yt_app.route('/home')
+def home_menu():
     return flask.render_template('home.html', title="Youtube local")
 
 
@@ -27,11 +48,38 @@ theme_names = {
     2: 'dark_theme',
 }
 
+ui_style_names = {
+    0: 'classic',
+    1: 'modern',
+    2: 'youtube',
+}
+
+color_scheme_names = {
+    0: 'system',
+    1: 'light',
+    2: 'dark',
+}
+
+# Loaded after each page's own styles so they can restyle them. The YouTube
+# style builds on the Modern one.
+ui_style_sheets = {
+    'classic': [],
+    'modern': ['/youtube.com/static/modern_ui.css'],
+    'youtube': ['/youtube.com/static/modern_ui.css',
+                '/youtube.com/static/youtube_ui.css'],
+}
+
 @yt_app.context_processor
 def inject_theme_preference():
+    ui_style = ui_style_names.get(settings.ui_style, 'modern')
     return {
         'theme_path': '/youtube.com/static/' + theme_names[settings.theme] + '.css',
+        'ui_style': ui_style,
+        'ui_style_sheets': ui_style_sheets[ui_style],
+        'color_scheme': color_scheme_names.get(settings.color_scheme, 'system'),
         'settings': settings,
+        'utc_offset_seconds': time_display.utc_offset_seconds(),
+        'utc_offset_name': time_display.utc_offset_name(),
     }
 
 @yt_app.template_filter('commatize')
@@ -44,6 +92,32 @@ def commatize(num):
         except ValueError:
             return num
     return '{:,}'.format(num)
+
+@yt_app.template_filter('iso_utc')
+def iso_utc(unix_time):
+    '''For the datetime attribute of <time>'''
+    return time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(unix_time))
+
+yt_app.add_template_filter(time_display.relative_time, 'relative_time')
+yt_app.add_template_filter(time_display.date_time, 'date_time')
+
+NEW_VIDEO_SECONDS = 12*3600
+RELATIVE_TIME_RE = re.compile(r'(\d+) (second|minute|hour)s? ago')
+
+@yt_app.template_global()
+def is_new_video(info):
+    '''Whether to put a NEW badge on a video: uploaded in the last 12 hours'''
+    if info.get('type') != 'video':
+        return False
+    if info.get('timestamp') is not None:
+        age = time.time() - info['timestamp']
+        return 0 <= age < NEW_VIDEO_SECONDS
+    # Other pages only have YouTube's "5 hours ago", which rounds down
+    match = RELATIVE_TIME_RE.fullmatch(info.get('time_published') or '')
+    if match is None:
+        return False
+    amount, unit = int(match.group(1)), match.group(2)
+    return unit != 'hour' or amount < NEW_VIDEO_SECONDS//3600
 
 def timestamp_replacement(match):
     time_seconds = 0

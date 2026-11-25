@@ -1,160 +1,358 @@
 {% set page_title = 'Subscription Manager' %}
 {% extends "base.html" %}
 {% block style %}
-    .import-export{
-        display: flex;
-        flex-direction: row;
-        flex-wrap: wrap;
-        padding-top: 10px;
+    .sub-manager [hidden]{
+        display: none !important;
     }
+
+    .sub-manager{
+        max-width: 960px;
+        margin: 0 auto;
+        padding-top: 15px;
+    }
+
+    .sub-manager-header{
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+        .sub-manager-header h1{
+            font-size: 1.5rem;
+        }
+        .sub-count{
+            font-weight: normal;
+            opacity: 0.7;
+        }
+
+    .import-export{
+        margin-bottom: 15px;
+        background-color: var(--interface-color);
+        border-radius: 4px;
+    }
+        .import-export > summary{
+            cursor: pointer;
+            padding: 8px 12px;
+            user-select: none;
+        }
+        .import-export-body{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            padding: 5px 12px 12px;
+        }
         .subscriptions-import-export-form{
-            background-color: var(--interface-color);
             display: flex;
             flex-direction: column;
             align-items: flex-start;
-            max-width: 600px;
-            padding:10px;
-            margin-left: 10px;
-            margin-bottom: 10px;
+            gap: 8px;
         }
             .subscriptions-import-export-form h2{
-                font-size: 1.25rem;
-                margin-bottom: 10px;
+                font-size: 1rem;
             }
 
-            .import-export-submit-button{
-                margin-top:15px;
-                align-self: flex-end;
-            }
-
-
-        .subscriptions-export-links{
-            margin: 0px 0px 0px 20px;
-            background-color: var(--interface-color);
-            list-style: none;
-            max-width: 300px;
-            padding:10px;
-        }
+    .sub-panel{
+        background-color: var(--interface-color);
+        border-radius: 4px;
+        overflow: hidden;
+    }
 
     .sub-list-controls{
-        background-color: var(--interface-color);
-        padding:15px;
-        padding-top: 0px;
-        padding-left: 5px;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--background-color);
     }
-        .sub-list-controls > *{
-            margin-left: 10px;
-            margin-top: 15px;
+        .sub-filter{
+            flex: 1 1 200px;
+            min-width: 0;
+            padding: 5px 8px;
+        }
+        .sub-list-controls .spacer{
+            flex-grow: 1;
         }
 
-
-    .tag-group-list{
-        list-style: none;
-        margin-left: 10px;
-        margin-right: 10px;
-        padding: 0px;
+    .selection-bar{
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--background-color);
     }
-        .tag-group{
-            border-style: solid;
-            margin-bottom: 10px;
+        .select-all-label{
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .selected-count{
+            opacity: 0.7;
+            margin-right: auto;
+        }
+        .selection-bar input[name="tags"]{
+            width: 180px;
+            max-width: 100%;
+        }
+        .selection-bar button:disabled,
+        .selection-bar input[type="reset"]:disabled{
+            opacity: 0.4;
+            cursor: default;
+        }
+
+    .sub-scroll{
+        max-height: max(300px, calc(100vh - 280px));
+        overflow-y: auto;
+    }
+
+    .tag-group-name{
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        display: flex;
+        justify-content: space-between;
+        padding: 6px 12px;
+        font-size: 0.95rem;
+        background-color: var(--background-color);
+    }
+        .tag-group-name .sub-count{
+            font-size: 0.85rem;
         }
 
     .sub-list{
         list-style: none;
-        padding:10px;
-        column-width: 300px;
-        column-gap: 40px;
+        margin: 0;
+        padding: 0;
     }
         .sub-list-item{
-            display:flex;
-            margin-bottom: 10px;
-            break-inside:avoid;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 6px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--background-color);
         }
-        .sub-list-item:not(.muted){
-            background-color: var(--interface-color);
+        .sub-list-item:last-child{
+            border-bottom: none;
         }
-            .tag-list{
-                margin-left:15px;
-                font-weight:bold;
+        .sub-list-item:hover{
+            outline: 1px solid var(--interface-border-color);
+            outline-offset: -1px;
+        }
+        .sub-list-item.selected{
+            box-shadow: inset 3px 0 0 rgb(var(--link-color-rgb));
+        }
+            .sub-list-checkbox{
+                height: 1.2em;
+                width: 1.2em;
+                flex-shrink: 0;
+                margin: 0;
+                cursor: pointer;
             }
             .sub-list-item-name{
-                margin-left:15px;
+                flex: 1 1 auto;
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
             }
-            .sub-list-checkbox{
-                height: 1.5em;
-                min-width: 1.5em;   // need min-width otherwise browser doesn't respect the width and squishes the checkbox down when there's too many tags
+            .tag-list{
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: flex-end;
+                gap: 4px;
+                flex-shrink: 0;
+                max-width: 50%;
             }
+                .tag, .muted-badge{
+                    font-size: 0.8rem;
+                    padding: 1px 7px;
+                    border-radius: 10px;
+                    border: 1px solid var(--interface-border-color);
+                    opacity: 0.85;
+                    white-space: nowrap;
+                }
+                .muted-badge{
+                    border-style: dashed;
+                }
+
+    .no-results{
+        padding: 20px 12px;
+        text-align: center;
+        opacity: 0.7;
+    }
 {% endblock style %}
 
 
 {% macro subscription_list(sub_list) %}
+    <ol class="sub-list">
     {% for subscription in sub_list %}
-        <li class="sub-list-item {{ 'muted' if subscription['muted'] else '' }}">
-            <input class="sub-list-checkbox" name="channel_ids" value="{{ subscription['channel_id'] }}" form="subscription-manager-form" type="checkbox">
+        <li class="sub-list-item {{ 'muted' if subscription['muted'] else '' }}" data-search="{{ (subscription['channel_name'] ~ ' ' ~ ' '.join(subscription['tags']))|lower }}">
+            <input class="sub-list-checkbox" name="channel_ids" value="{{ subscription['channel_id'] }}" form="subscription-manager-form" type="checkbox" aria-label="Select {{ subscription['channel_name'] }}">
             <a href="{{ subscription['channel_url'] }}" class="sub-list-item-name" title="{{ subscription['channel_name'] }}">{{ subscription['channel_name'] }}</a>
-            <span class="tag-list">{{ ', '.join(subscription['tags']) }}</span>
+            <span class="tag-list">
+                {% if subscription['muted'] %}<span class="muted-badge">muted</span>{% endif %}
+                {% for tag in subscription['tags'] %}<span class="tag">{{ tag }}</span>{% endfor %}
+            </span>
         </li>
     {% endfor %}
+    </ol>
 {% endmacro %}
 
 
 
 {% block main %}
-    <div class="import-export">
-        <form class="subscriptions-import-export-form" enctype="multipart/form-data" action="/youtube.com/import_subscriptions" method="POST">
-            <h2>Import subscriptions</h2>
-            <input type="file" id="subscriptions-import" accept="application/json, application/xml, text/x-opml, text/csv" name="subscriptions_file" required>
-            <input type="submit" value="Import" class="import-export-submit-button">
-        </form>
-
-        <form class="subscriptions-import-export-form" action="/youtube.com/export_subscriptions" method="POST">
-            <h2>Export subscriptions</h2>
-            <div>
-                <select id="export-type" name="export_format" title="Export format">
-                    <option value="json_newpipe">JSON (NewPipe)</option>
-                    <option value="json_google_takeout">JSON (Old Google Takeout Format)</option>
-                    <option value="opml">OPML (RSS, no tags)</option>
-                </select>
-                <label for="include-muted">Include muted</label>
-                <input id="include-muted" type="checkbox" name="include_muted" checked>
-            </div>
-            <input type="submit" value="Export" class="import-export-submit-button">
-        </form>
+<div class="sub-manager">
+    <div class="sub-manager-header">
+        <h1>Subscriptions <span class="sub-count">({{ total }})</span></h1>
     </div>
 
-    <hr>
+    <details class="import-export">
+        <summary>Import / Export</summary>
+        <div class="import-export-body">
+            <form class="subscriptions-import-export-form" enctype="multipart/form-data" action="/youtube.com/import_subscriptions" method="POST">
+                <h2>Import subscriptions</h2>
+                <input type="file" id="subscriptions-import" accept="application/json, application/xml, text/x-opml, text/csv" name="subscriptions_file" required>
+                <input type="submit" value="Import">
+            </form>
 
-    <form id="subscription-manager-form" class="sub-list-controls" method="POST">
-        {% if group_by_tags %}
-            <a class="sort-button" href="/https://www.youtube.com/subscription_manager?group_by_tags=0">Don't group</a>
-        {% else %}
-            <a class="sort-button" href="/https://www.youtube.com/subscription_manager?group_by_tags=1">Group by tags</a>
-        {% endif %}
-        <input type="text" name="tags" placeholder="Comma-separated tags">
-        <button type="submit" name="action" value="add_tags">Add tags</button>
-        <button type="submit" name="action" value="remove_tags">Remove tags</button>
-        <button type="submit" name="action" value="unsubscribe_verify">Unsubscribe</button>
-        <button type="submit" name="action" value="mute">Mute</button>
-        <button type="submit" name="action" value="unmute">Unmute</button>
-        <input type="reset" value="Clear Selection">
-    </form>
+            <form class="subscriptions-import-export-form" action="/youtube.com/export_subscriptions" method="POST">
+                <h2>Export subscriptions</h2>
+                <div>
+                    <select id="export-type" name="export_format" title="Export format">
+                        <option value="json_newpipe">JSON (NewPipe)</option>
+                        <option value="json_google_takeout">JSON (Old Google Takeout Format)</option>
+                        <option value="opml">OPML (RSS, no tags)</option>
+                    </select>
+                    <label for="include-muted">Include muted</label>
+                    <input id="include-muted" type="checkbox" name="include_muted" checked>
+                </div>
+                <input type="submit" value="Export">
+            </form>
+        </div>
+    </details>
 
+    <div class="sub-panel">
+        <div class="sub-list-controls">
+            <input type="search" class="sub-filter" id="sub-filter" placeholder="Filter channels or tags..." aria-label="Filter channels">
+            {% if group_by_tags %}
+                <a class="sort-button" href="/https://www.youtube.com/subscription_manager?group_by_tags=0">Don't group</a>
+            {% else %}
+                <a class="sort-button" href="/https://www.youtube.com/subscription_manager?group_by_tags=1">Group by tags</a>
+            {% endif %}
+        </div>
 
-    {% if group_by_tags %}
-        <ul class="tag-group-list">
-            {% for tag_name, sub_list in tag_groups %}
-                <li class="tag-group">
-                    <h2 class="tag-group-name">{{ tag_name }}</h2>
-                    <ol class="sub-list">
-                        {{ subscription_list(sub_list) }}
-                    </ol>
-                </li>
-            {% endfor %}
-        </ul>
-    {% else %}
-        <ol class="sub-list">
-            {{ subscription_list(sub_list) }}
-        </ol>
-    {% endif %}
+        <form id="subscription-manager-form" class="selection-bar" method="POST">
+            <label class="select-all-label"><input type="checkbox" id="select-all">Select all</label>
+            <span class="selected-count" id="selected-count">0 selected</span>
+            <input type="text" name="tags" placeholder="Comma-separated tags">
+            <button type="submit" name="action" value="add_tags" data-needs-selection>Add tags</button>
+            <button type="submit" name="action" value="remove_tags" data-needs-selection>Remove tags</button>
+            <button type="submit" name="action" value="mute" data-needs-selection>Mute</button>
+            <button type="submit" name="action" value="unmute" data-needs-selection>Unmute</button>
+            <button type="submit" name="action" value="unsubscribe_verify" data-needs-selection>Unsubscribe</button>
+            <input type="reset" value="Clear" data-needs-selection>
+        </form>
 
+        <div class="sub-scroll" id="sub-scroll">
+            {% if group_by_tags %}
+                {% for tag_name, group_list in tag_groups %}
+                    <section class="tag-group">
+                        <h2 class="tag-group-name">{{ tag_name }} <span class="sub-count">{{ group_list|length }}</span></h2>
+                        {{ subscription_list(group_list) }}
+                    </section>
+                {% endfor %}
+            {% else %}
+                {{ subscription_list(sub_list) }}
+            {% endif %}
+            <div class="no-results" id="no-results" {{ '' if total == 0 else 'hidden' }}>
+                {{ 'No subscriptions yet.' if total == 0 else 'No channels match.' }}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function(){
+    var scroll = document.getElementById('sub-scroll');
+    var filter = document.getElementById('sub-filter');
+    var selectAll = document.getElementById('select-all');
+    var countEl = document.getElementById('selected-count');
+    var form = document.getElementById('subscription-manager-form');
+    var noResults = document.getElementById('no-results');
+    var items = Array.prototype.slice.call(scroll.querySelectorAll('.sub-list-item'));
+    var groups = Array.prototype.slice.call(scroll.querySelectorAll('.tag-group'));
+    var needSelection = form.querySelectorAll('[data-needs-selection]');
+    if (items.length === 0) return;
+
+    function boxes(){ return scroll.querySelectorAll('.sub-list-checkbox'); }
+    function visibleItems(){ return items.filter(function(li){ return !li.hidden; }); }
+
+    function refresh(){
+        var selected = {};
+        boxes().forEach(function(cb){
+            if (cb.checked) selected[cb.value] = true;
+            cb.parentNode.classList.toggle('selected', cb.checked);
+        });
+        var n = Object.keys(selected).length;
+        countEl.textContent = n + ' selected';
+        needSelection.forEach(function(el){ el.disabled = n === 0; });
+
+        var vis = visibleItems();
+        var checkedVis = vis.filter(function(li){ return li.firstElementChild.checked; }).length;
+        selectAll.checked = vis.length > 0 && checkedVis === vis.length;
+        selectAll.indeterminate = checkedVis > 0 && checkedVis < vis.length;
+    }
+
+    // Keep duplicate rows (same channel under several tags) in sync
+    function setChannel(value, checked){
+        boxes().forEach(function(cb){ if (cb.value === value) cb.checked = checked; });
+    }
+
+    scroll.addEventListener('change', function(e){
+        if (e.target.classList.contains('sub-list-checkbox')) {
+            setChannel(e.target.value, e.target.checked);
+            refresh();
+        }
+    });
+
+    // Clicking anywhere on a row (except the link) toggles it
+    scroll.addEventListener('click', function(e){
+        var li = e.target.closest('.sub-list-item');
+        if (!li || e.target.closest('a') || e.target.classList.contains('sub-list-checkbox')) return;
+        var cb = li.firstElementChild;
+        setChannel(cb.value, !cb.checked);
+        refresh();
+    });
+
+    selectAll.addEventListener('change', function(){
+        var checked = selectAll.checked;
+        visibleItems().forEach(function(li){ setChannel(li.firstElementChild.value, checked); });
+        refresh();
+    });
+
+    form.addEventListener('reset', function(){ setTimeout(refresh, 0); });
+
+    filter.addEventListener('input', function(){
+        var q = filter.value.trim().toLowerCase();
+        var any = false;
+        items.forEach(function(li){
+            li.hidden = q !== '' && li.dataset.search.indexOf(q) === -1;
+            if (!li.hidden) any = true;
+        });
+        groups.forEach(function(g){
+            g.hidden = !g.querySelector('.sub-list-item:not([hidden])');
+        });
+        noResults.hidden = any;
+        refresh();
+    });
+
+    refresh();
+})();
+</script>
 {% endblock main %}
