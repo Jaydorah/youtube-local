@@ -8,7 +8,7 @@ import pytest
 # youtube has to be imported before settings, like in test_util.py
 import youtube
 from youtube import subscriptions, time_display, watch, watch_progress
-from youtube import yt_app
+from youtube import yt_app, util
 import settings
 
 
@@ -452,3 +452,62 @@ def test_estimate_is_not_newer_than_the_video_before_it(database,
             assert saved_time(cursor, 'newest00001')[:2] == (exact_time, 1)
             assert saved_time(cursor, 'older000001')[:2] == \
                 (exact_time - 1, 0)
+
+
+def _check_channel_with(monkeypatch, result):
+    monkeypatch.setattr(subscriptions, '_get_atoma_feed',
+                        lambda channel_id: '')
+    monkeypatch.setattr(subscriptions, '_get_live_video_ids',
+                        lambda channel_id: set())
+    monkeypatch.setattr(subscriptions.check_channels_queue, 'count_extra',
+                        lambda amount: None)
+    monkeypatch.setattr(subscriptions, '_get_channel_videos_first_page',
+                        lambda channel_id, name: result)
+    subscriptions._get_upstream_videos(CHANNEL)
+
+
+def test_cleanup_lists_terminated_channel(client, monkeypatch):
+    reason = 'This channel was removed because it violated our Community Guidelines.'
+    _check_channel_with(monkeypatch, {'error': reason, 'items': []})
+    page = client.get('/subscription_manager?view=cleanup')
+    html = page.get_data(as_text=True)
+    assert page.status_code == 200
+    assert reason in html
+    assert 'value="%s" form="subscription-manager-form" type="checkbox" checked' % CHANNEL in html
+
+    # it's taken off the list once a check works again
+    _check_channel_with(monkeypatch, {'error': None, 'items': [
+        {'id': 'newvideo001', 'title': 'Title', 'duration': '10:00',
+         'description': None, 'type': 'video', 'time_published': '1 day ago'},
+    ]})
+    html = client.get(
+        '/subscription_manager?view=cleanup').get_data(as_text=True)
+    assert reason not in html
+
+
+def test_cleanup_lists_inactive_channel(client, database):
+    with subscriptions.open_database() as connection:
+        with connection as cursor:
+            cursor.execute('''UPDATE subscribed_channels
+                              SET time_last_checked = 1''')
+            cursor.execute('UPDATE videos SET time_published = ?',
+                           [int(time.time()) - 400*DAY])
+            cursor.execute(
+                '''INSERT INTO subscribed_channels (yt_channel_id,
+                       channel_name, time_last_checked)
+                   VALUES ('UCbbbbbbbbbbbbbbbbbbbbbb', 'Empty channel', 1),
+                          ('UCcccccccccccccccccccccc', 'Unchecked', 0)''')
+    html = client.get(
+        '/subscription_manager?view=cleanup').get_data(as_text=True)
+    assert 'No uploads in over a year' in html
+    assert 'Last upload' in html
+    assert 'Empty channel' in html and 'No uploads<' in html
+    assert 'Unchecked' not in html
+    assert '1 channel has never been checked' in html
+
+
+def test_feed_server_error_is_not_raised(monkeypatch):
+    def fail(url):
+        raise util.FetchError('503', reason='Service Unavailable')
+    monkeypatch.setattr(util, 'fetch_url', fail)
+    assert subscriptions._get_atoma_feed(CHANNEL) == ''

@@ -1,6 +1,7 @@
-/* Volume shown over the video while the up and down arrows change it, like
-   YouTube's. Dark and translucent so it reads over any video. */
-.volume-display{
+/* Box shown over the video for a second when the volume or the time
+   changes. Small, dark and translucent so it reads over any video without
+   covering much of it, and the clicks go through to the video. */
+.player-osd{
     position: absolute;
     top: 10%;
     left: 50%;
@@ -22,11 +23,11 @@
     opacity: 0;
     transition: opacity 0.2s;
 }
-.volume-display.shown{
+.player-osd.shown{
     opacity: 1;
     transition: none;
 }
-    .volume-display svg{
+    .player-osd svg{
         width: 24px;
         height: 24px;
         fill: none;
@@ -35,8 +36,24 @@
         stroke-linecap: round;
         stroke-linejoin: round;
     }
+
+/* New time, with how far it moved in small type above it */
+.player-osd[data-kind="seek"]{
+    flex-direction: column;
+    gap: 4px;
+    padding: 7px 14px;
+}
+    .player-osd .osd-delta{
+        font-size: 0.8rem;
+        font-weight: 500;
+        color: rgba(255, 255, 255, 0.75);
+    }
+    .player-osd .osd-delta:empty{
+        display: none;
+    }
+
 @media (prefers-reduced-motion: reduce){
-    .volume-display{
+    .player-osd{
         transition: none;
     }
 }

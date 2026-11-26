@@ -1,73 +1,144 @@
-{% set page_title = playlist_name + ' - Local playlist' %}
+{# A local playlist, or the queue (kind == 'queue') #}
+{% set page_title = playlist_name + (' - Playlist' if kind == 'playlist' else '') %}
 {% extends "base.html" %}
 {% import "common_elements.html" as common_elements %}
-{% block style %}
-    main > *{
-        width: 800px;
-        max-width: 100%;
-        margin: auto;
-    }
-
-    .playlist-metadata{
-        display: flex;
-        flex-direction: row;
-        flex-wrap: wrap;
-        justify-content: space-between;
-
-
-        margin: 15px auto;
-        padding: 7px;
-        background-color: var(--interface-color);
-    }
-        .playlist-title{
-        }
-        #export-options{
-            justify-self: end;
-        }
-
-    #video-remove-container{
-        display: flex;
-        justify-content: space-between;
-        margin: 0px auto 15px auto;
-    }
-        #playlist-remove-button{
-            white-space: nowrap;
-        }
-
-    #results{
-        display: grid;
-        grid-auto-rows: 0fr;
-        grid-row-gap: 10px;
-    }
-{% endblock style %}
+{% import "library_elements.html" as lib with context %}
 
 {% block main %}
-    <div class="playlist-metadata">
-        <h2 class="playlist-title">{{ playlist_name }}</h2>
+{% set count = summary['video_count'] %}
+{% set is_watch_later = kind == 'playlist' and summary['is_watch_later'] %}
+<div class="playlist-page">
+    <aside class="playlist-hero"{% if summary['thumbnail'] %} style="--hero-image: url('{{ summary['thumbnail'] }}')"{% endif %}>
+        <div class="playlist-hero-background" aria-hidden="true"></div>
+        <div class="playlist-hero-inner">
+            <a class="playlist-hero-thumb"{% if play_url %} href="{{ play_url }}"{% endif %} tabindex="-1" aria-hidden="true">
+                {% if summary['thumbnail'] %}
+                    <img src="{{ summary['thumbnail'] }}" alt="">
+                {% else %}
+                    <span class="library-card-placeholder">{{ lib.icon('queue' if kind == 'queue' else ('clock' if is_watch_later else 'playlist')) }}</span>
+                {% endif %}
+                {% if play_url %}<span class="playlist-hero-play">{{ lib.icon('play') }}{{ 'Play' if kind == 'queue' else 'Play all' }}</span>{% endif %}
+            </a>
+            <h1 class="playlist-hero-title">{{ playlist_name }}</h1>
+            <p class="playlist-hero-meta">
+                <span>{{ lib.plural(count, 'video') }}</span>
+                {%- if summary['total_duration'] %}<span>{{ summary['total_duration'] }}</span>{% endif -%}
+                {%- if summary.get('time_updated') %}<span class="meta-updated">Updated {{ summary['time_updated']|relative_time }}</span>{% endif -%}
+            </p>
+            {% if kind == 'queue' %}
+                <p class="playlist-hero-note">Queued videos play one after another when a video ends, before Autoplay would pick a related one. Each leaves the queue when it starts playing.</p>
+            {% elif playlist_mode == playlist_name %}
+                <p class="playlist-hero-note"><span class="playlist-mode-dot" aria-hidden="true"></span>Playlist mode is on: videos you click on a video's page are added here.</p>
+            {% endif %}
 
-        <div id="export-options">
-            <form id="playlist-export" method="post">
-                <select id="export-type" name="export_format">
-                    <option value="json">JSON</option>
-                    <option value="ids">Video id list (txt)</option>
-                    <option value="urls">Video url list (txt)</option>
-                </select>
-                <button type="submit" id="playlist-export-button" name="action" value="export">Export</button>
-            </form>
+            <div class="playlist-hero-actions">
+                {% if play_url %}
+                    <a class="lib-button lib-button-light" href="{{ play_url }}">{{ lib.icon('play') }}<span>{{ 'Play' if kind == 'queue' else 'Play all' }}</span></a>
+                {% endif %}
+                {% if shuffle_url %}
+                    <a class="lib-button lib-button-glass" href="{{ shuffle_url }}">{{ lib.icon('shuffle') }}<span>Shuffle</span></a>
+                {% elif kind == 'queue' and count > 1 %}
+                    <form method="post" action="/youtube.com/queue">
+                        <button type="submit" name="action" value="shuffle" class="lib-button lib-button-glass">{{ lib.icon('shuffle') }}<span>Shuffle</span></button>
+                    </form>
+                {% endif %}
+
+                {% if kind == 'playlist' %}
+                    <details class="popout">
+                        <summary class="lib-button lib-button-glass lib-button-icon" title="More" aria-label="More">{{ lib.icon('more') }}</summary>
+                        <div class="popout-panel popout-menu">
+                            {% if count %}
+                                <button type="button" class="popout-menu-item" data-queue-all="{{ playlist_name }}">{{ lib.icon('queue') }}<span>Add all to queue</span></button>
+                            {% endif %}
+                            {% if not is_watch_later %}
+                                <details class="popout-sub">
+                                    <summary class="popout-menu-item">{{ lib.icon('edit') }}<span>Rename</span></summary>
+                                    <form class="popout-form" method="post" action="{{ summary['url'] }}">
+                                        <label for="rename-playlist">New name</label>
+                                        <input id="rename-playlist" name="new_name" value="{{ playlist_name }}" maxlength="100" required autocomplete="off">
+                                        <div class="popout-buttons">
+                                            <button type="submit" name="action" value="rename" class="lib-button lib-button-primary">Rename</button>
+                                        </div>
+                                    </form>
+                                </details>
+                            {% endif %}
+                            <div class="popout-menu-label">Export</div>
+                            {% for fmt, label, _, _ in export_formats %}
+                                <a class="popout-menu-item" href="{{ summary['url'] }}/export?format={{ fmt }}" download>{{ lib.icon('export') }}<span>{{ label }}</span></a>
+                            {% endfor %}
+                            {% if count or summary.get('time_updated') %}
+                                <div class="popout-menu-separator"></div>
+                                <details class="popout-sub">
+                                    <summary class="popout-menu-item is-danger">{{ lib.icon('trash') }}<span>Delete playlist</span></summary>
+                                    <form class="popout-form" method="post" action="{{ summary['url'] }}">
+                                        <p>Delete <b>{{ playlist_name }}</b>{% if count %} and the {{ lib.plural(count, 'video') }} in it{% endif %}? This can't be undone.</p>
+                                        <div class="popout-buttons">
+                                            <button type="submit" name="action" value="delete" class="lib-button lib-button-danger">Delete</button>
+                                        </div>
+                                    </form>
+                                </details>
+                            {% endif %}
+                        </div>
+                    </details>
+                {% elif count %}
+                    <details class="popout">
+                        <summary class="lib-button lib-button-glass lib-button-icon" title="More" aria-label="More">{{ lib.icon('more') }}</summary>
+                        <div class="popout-panel popout-menu">
+                            <details class="popout-sub">
+                                <summary class="popout-menu-item">{{ lib.icon('playlist-add') }}<span>Save as playlist</span></summary>
+                                <form class="popout-form" method="post" action="/youtube.com/queue">
+                                    <label for="queue-playlist-name">Playlist name</label>
+                                    <input id="queue-playlist-name" name="playlist_name" maxlength="100" required autocomplete="off" list="queue-playlist-names">
+                                    <datalist id="queue-playlist-names">
+                                        {% for name in header_playlist_names %}<option value="{{ name }}">{% endfor %}
+                                    </datalist>
+                                    <div class="popout-buttons">
+                                        <button type="submit" name="action" value="save" class="lib-button lib-button-primary">Save</button>
+                                    </div>
+                                </form>
+                            </details>
+                            <form method="post" action="/youtube.com/queue">
+                                <button type="submit" name="action" value="clear" class="popout-menu-item is-danger">{{ lib.icon('trash') }}<span>Clear queue</span></button>
+                            </form>
+                        </div>
+                    </details>
+                {% endif %}
+            </div>
         </div>
-    </div>
-    <form id="playlist-remove" action="/youtube.com/edit_playlist" method="post" target="_self"></form>
-    <div id="video-remove-container">
-        <button type="submit" name="action" value="remove_playlist" form="playlist-remove" formaction="" onclick="return confirm('You are about to permanently delete {{ playlist_name }}\n\nOnce a playlist is permanently deleted, it cannot be recovered.');">Remove playlist</button>
-        <input type="hidden" name="playlist_page" value="{{ playlist_name }}" form="playlist-edit">
-        <button type="submit" id="playlist-remove-button" name="action" value="remove" form="playlist-edit" formaction="">Remove from playlist</button>
-    </div>
-    <div id="results">
-        {% for video_info in videos %}
-            {{ common_elements.item(video_info) }}
-        {% endfor %}
-    </div>
-    <nav class="page-button-row">
-        {{ common_elements.page_buttons(num_pages, '/https://www.youtube.com/playlists/' + playlist_name, parameters_dictionary) }}
-    </nav>
+    </aside>
+
+    <section class="playlist-main" aria-label="Videos">
+        {{ lib.page_message(message) }}
+        {% if videos %}
+            <ol class="playlist-rows" data-sortable="{{ kind }}"{% if kind == 'playlist' %} data-playlist-name="{{ playlist_name }}"{% endif %} data-offset="{{ offset }}">
+                {% for video in videos %}
+                    <li class="playlist-row" data-video-id="{{ video['id'] }}">
+                        <span class="playlist-row-handle" title="Drag to reorder" aria-hidden="true">{{ lib.icon('drag') }}</span>
+                        <span class="playlist-row-index">{{ offset + loop.index }}</span>
+                        {{ common_elements.item(video, include_badges=false, include_checkbox=false, hideable=false, menu_context=('queue' if kind == 'queue' else 'playlist:' + playlist_name)) }}
+                    </li>
+                {% endfor %}
+            </ol>
+            {% if num_pages > 1 %}
+                <nav class="page-button-row">
+                    {{ common_elements.page_buttons(num_pages, summary['url'], parameters_dictionary) }}
+                </nav>
+            {% endif %}
+        {% else %}
+            <div class="playlist-empty">
+                {{ lib.icon('queue' if kind == 'queue' else ('clock' if is_watch_later else 'playlist')) }}
+                {% if kind == 'queue' %}
+                    <h2>Your queue is empty</h2>
+                    <p>Choose <b>Add to queue</b> or <b>Play next</b> in the menu of any video to line it up.</p>
+                {% elif is_watch_later %}
+                    <h2>Nothing saved for later</h2>
+                    <p>Choose <b>Save to Watch later</b> in the menu of any video, or right-click it.</p>
+                {% else %}
+                    <h2>No videos yet</h2>
+                    <p>Choose <b>Save to playlist</b> in the menu of any video, or turn on <b>Playlist mode</b> under Autoplay on a video's page to save the videos you click there.</p>
+                {% endif %}
+            </div>
+        {% endif %}
+    </section>
+</div>
 {% endblock main %}

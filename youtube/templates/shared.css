@@ -366,6 +366,22 @@ body{
         margin: 0px;
     }
 
+/* Outline around the video, playlist or channel under the pointer, or whose
+   link has keyboard focus */
+.item{
+    outline: 2px solid transparent;
+    outline-offset: var(--item-outline-offset, 0px);
+    transition: outline-color 0.12s ease;
+}
+.item:hover, .item:has(a:focus-visible){
+    outline-color: var(--accent, rgb(var(--link-color-rgb)));
+}
+/* The playlist panel scrolls, which would clip an outline drawn outside it.
+   "nav." outranks the offsets the UI styles set for .side-videos. */
+nav.playlist-videos .item{
+    --item-outline-offset: -2px;
+}
+
 
 .page-button-row{
     margin-bottom: 10px;

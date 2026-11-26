@@ -26,6 +26,8 @@ var refreshForms = Array.prototype.filter.call(
 var polling = false;
 // Whether checking was seen running, so its end can be reported
 var sawChecking = false;
+// Whether its end went under the bell in the header already
+var reported = false;
 
 function formatNumber(number) {
     return Number(number).toLocaleString();
@@ -37,6 +39,21 @@ function setButtonChecking(form, checking) {
         button.dataset.label = button.value;
     button.value = checking ? 'Checking…' : button.dataset.label;
     button.disabled = checking;
+}
+
+// Keeps the result under the bell too, for when the status box was missed
+function report(status) {
+    if (reported || !window.ytlNotifications)
+        return;
+    reported = true;
+    var text = 'Checked ' + formatNumber(status.total)
+        + (status.total === 1 ? ' channel: ' : ' channels: ');
+    if (status.videos_added)
+        text += formatNumber(status.videos_added)
+            + (status.videos_added === 1 ? ' new video' : ' new videos');
+    else
+        text += 'no new videos';
+    window.ytlNotifications.add(text, {url: '/youtube.com/subscriptions'});
 }
 
 function render(status) {
@@ -57,6 +74,7 @@ function render(status) {
     });
 
     if (status.checking > 0) {
+        reported = false;
         statusBox.hidden = false;
         spinner.hidden = false;
         reloadButton.hidden = true;
@@ -73,6 +91,7 @@ function render(status) {
         spinner.hidden = true;
         closeButton.hidden = false;
         progressFill.style.width = '100%';
+        report(status);
         if (status.videos_added) {
             statusText.textContent = 'Done. '
                 + formatNumber(status.videos_added)
@@ -120,6 +139,7 @@ refreshForms.forEach(function(form) {
         })
         .then(function() {
             sawChecking = true;
+            reported = false;
             startPolling();
         })
         .catch(function() {

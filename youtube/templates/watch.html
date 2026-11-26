@@ -2,6 +2,7 @@
 {% extends "base.html" %}
 {% import "common_elements.html" as common_elements %}
 {% import "comments.html" as comments with context %}
+{% import "library_elements.html" as library_elements with context %}
 {% block style %}
     body {
         --theater_video_target_width: {{ theater_video_target_width }};
@@ -22,17 +23,26 @@
     }
 
     .playability-error{
-        height: 360px;
+        min-height: 360px;
         max-width: 640px;
         grid-column: 2;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px 32px;
         background-color: var(--video-background-color);
-        text-align:center;
+        text-align: center;
     }
-        .playability-error span{
-            position: relative;
-            top: 50%;
-            transform: translate(-50%, -50%);
-            white-space: pre-wrap;
+        .playability-error p{
+            margin: 0;
+            max-width: 36em;
+            line-height: 1.5;
+            /* keeps line breaks inside the message itself */
+            white-space: pre-line;
+            overflow-wrap: anywhere;
+            user-select: text;
+            cursor: text;
         }
 
     .live-url-choices{
@@ -235,7 +245,18 @@
             .video-info > .direct-link{
                 grid-area: v-direct-link;
                 margin-bottom: 8px;
+                display: flex;
+                align-items: center;
+                gap: 10px;
             }
+                .share-button{
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 4px;
+                    padding: 2px 8px;
+                    cursor: pointer;
+                    font: inherit;
+                }
             .video-info > .download-dropdown{
                 grid-area: v-download;
             }
@@ -297,6 +318,10 @@
         .comments-area-inner{
             padding-top: 10px;
         }
+            .comments-placeholder{
+                margin: 0px;
+                padding: 8px 0px;
+            }
             .comment{
                 max-width:640px;
             }
@@ -527,12 +552,9 @@
 {% block main %}
     {% if playability_error %}
         <div class="playability-error">
-            <span>{{ 'Error: ' + playability_error }}
-            {% if invidious_reload_button %}
-                <a href="{{ video_url }}&use_invidious=0"><br>
-Reload without invidious (for usage of new identity button).</a>
-            {% endif %}
-            </span>
+            <p>{{ 'Error: ' + playability_error }}
+            {%- if invidious_reload_button %}<br><a href="{{ video_url }}&use_invidious=0">Reload without invidious (for usage of new identity button).</a>{% endif -%}
+            </p>
         </div>
     {% elif (uni_sources.__len__() == 0 or live) and hls_formats.__len__() != 0 %}
         <div class="live-url-choices">
@@ -578,7 +600,7 @@ Reload without invidious (for usage of new identity button).</a>
             {%- endif -%}
         </ul>
         <address>Uploaded by <a href="{{ uploader_channel_url }}">{{ uploader }}</a></address>
-        <span class="views">{{ view_count }} views</span>
+        <span class="views" title="{{ view_count|commatize }} views">{{ view_count|count }} views</span>
 
 
         {% if published_timestamp is not none %}
@@ -587,9 +609,9 @@ Reload without invidious (for usage of new identity button).</a>
             <time>Published on {{ time_published }}</time>
         {% endif %}
         <span class="likes-dislikes">
-            {%- if like_count %}{{ like_count }} likes{% endif -%}
+            {%- if like_count %}<span title="{{ like_count|commatize }} likes">{{ like_count|count }} likes</span>{% endif -%}
             {%- if like_count and dislike_count %} · {% endif -%}
-            {%- if dislike_count %}<span title="Estimated by Return YouTube Dislike">{{ dislike_count }} dislikes</span>{% endif -%}
+            {%- if dislike_count %}<span title="{{ dislike_count|commatize }} dislikes, estimated by Return YouTube Dislike">{{ dislike_count|count }} dislikes</span>{% endif -%}
         </span>
 
         {% if settings.video_player == 0 %}
@@ -607,7 +629,18 @@ Reload without invidious (for usage of new identity button).</a>
         {# "Add to playlist" at the top of the page adds this video #}
         <input name="video_info_list" value="{{ video_info }}" form="playlist-edit" type="hidden">
 
-        <span class="direct-link"><a href="https://youtu.be/{{ video_id }}">Direct Link</a></span>
+        <span class="direct-link">
+            <a href="https://youtu.be/{{ video_id }}">Direct Link</a>
+            <button type="button" class="share-button" data-share-url="https://youtu.be/{{ video_id }}" title="Copy link to clipboard">
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M16 1H6C4.9 1 4 1.9 4 3v13h2V3h10V1zm3 4H10c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h9c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H10V7h9v14z"/></svg>
+                <span class="share-button-label">Share</span>
+            </button>
+            {# Save and the menu of this video, opened by library.js #}
+            <span class="watch-actions" data-video-id="{{ video_id }}" data-video-info="{{ video_info }}" data-menu-context="watch" data-no-hide>
+                <button type="button" class="share-button watch-save-button" data-save-video title="Save to a playlist">{{ common_elements.icon('bookmark') }}<span>Save</span></button>
+                <button type="button" class="share-button item-menu-button watch-menu-button" aria-label="More actions" aria-haspopup="menu" aria-expanded="false">{{ common_elements.icon('more') }}</button>
+            </span>
+        </span>
 
         <details class="download-dropdown">
             <summary class="download-dropdown-label">Download</summary>
@@ -691,7 +724,10 @@ Reload without invidious (for usage of new identity button).</a>
                 <div class="playlist-header">
                     <a href="{{ playlist['url'] }}" title="{{ playlist['title'] }}"><h3>{{ playlist['title'] }}</h3></a>
                     <ul class="playlist-metadata">
-                        <li>Autoplay: <input type="checkbox" id="autoplay-toggle"></li>
+                        <li><label class="playlist-autoplay">Autoplay <input type="checkbox" id="autoplay-toggle"></label></li>
+                        {% if playlist.get('shuffle') %}
+                            <li class="playlist-shuffled">{{ common_elements.icon('shuffle') }}Shuffled</li>
+                        {% endif %}
                         {% if playlist['current_index'] is none %}
                             <li>[Error!]/{{ playlist['video_count'] }}</li>
                         {% else %}
@@ -705,17 +741,27 @@ Reload without invidious (for usage of new identity button).</a>
                         {# non-lazy load for 5 videos surrounding current video #}
                         {# for non-js browsers or old such that IntersectionObserver doesn't work #}
                         {# -10 is sentinel to not load anything if there's no current_index for some reason #}
-                        {% if (playlist.get('current_index', -10) - loop.index0)|abs is lt(5)  %}
-                            {{ common_elements.item(info, include_badges=false, lazy_load=false, include_checkbox=false) }}
-                        {% else %}
-                            {{ common_elements.item(info, include_badges=false, lazy_load=true, include_checkbox=false) }}
-                        {% endif %}
+                        {% set lazy = not ((playlist.get('current_index', -10) - loop.index0)|abs is lt(5)) %}
+                        {{ common_elements.item(info, include_badges=false, lazy_load=lazy, include_checkbox=false, hideable=false, menu_context=('playlist:' + playlist['title']) if playlist.get('is_local') else '') }}
                     {% endfor %}
                 </nav>
             </div>
-        {% elif settings.related_videos_mode != 0 %}
-            <div class="autoplay-toggle-container"><label for="autoplay-toggle">Autoplay: </label><input type="checkbox" id="autoplay-toggle"></div>
         {% endif %}
+        <div class="up-next-controls">
+            {% if not playlist and settings.related_videos_mode != 0 %}
+                <label class="up-next-toggle autoplay-toggle-container" for="autoplay-toggle">
+                    <span class="up-next-label">
+                        <span class="up-next-name">Autoplay</span>
+                        <span class="up-next-help">Play a related video next</span>
+                    </span>
+                    <input type="checkbox" id="autoplay-toggle" class="setting-switch">
+                </label>
+            {% endif %}
+            {{ library_elements.playlist_mode_control(header_playlist_names) }}
+        </div>
+        <div id="queue-panel-slot">
+            {{ library_elements.queue_panel(queue_videos) }}
+        </div>
 
 
         {% if chapters %}
@@ -758,18 +804,15 @@ Reload without invidious (for usage of new identity button).</a>
     </div>
 
     {% if settings.comments_mode != 0 %}
-        {% if comments_disabled %}
-            <div class="comments-area-outer comments-disabled">Comments disabled</div>
-        {% else %}
-            <details class="comments-area-outer" {{'open' if settings.comments_mode == 1 else ''}}>
-                <summary>{{ comment_count|commatize }} comment{{'s' if comment_count != '1' else ''}}</summary>
-                <section class="comments-area-inner comments-area">
-                    {% if comments_info %}
-                        {{ comments.video_comments(comments_info) }}
-                    {% endif %}
-                </section>
-            </details>
-        {% endif %}
+        {# Filled in by watch.js once scrolled to or opened. Whether comments
+           are turned off is only known then: the page the video's info comes
+           from no longer says. #}
+        <details class="comments-area-outer" {{'open' if settings.comments_mode == 1 else ''}}>
+            <summary>{% if comment_count %}{{ comment_count|count }} comment{{'s' if comment_count != '1' else ''}}{% else %}Comments{% endif %}</summary>
+            <section class="comments-area-inner comments-area" data-comments-url="{{ comments_url }}">
+                <p class="comments-placeholder"><a href="{{ comments_page_url }}">Show comments</a></p>
+            </section>
+        </details>
     {% endif %}
 
     <script src="/youtube.com/static/js/av-merge.js"></script>

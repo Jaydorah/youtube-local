@@ -112,8 +112,8 @@ def post_process_comments_info(comments_info):
         if comment['approx_like_count'] == '1':
             comment['likes_text'] = '1 like'
         else:
-            comment['likes_text'] = (str(comment['approx_like_count'])
-                                     + ' likes')
+            comment['likes_text'] = (
+                util.format_count(comment['approx_like_count']) + ' likes')
 
     comments_info['include_avatars'] = settings.enable_comment_avatars
     if comments_info['ctoken']:
@@ -195,6 +195,25 @@ def video_comments(video_id, sort=0, offset=0, lc='', secret_key=''):
 
     return comments_info
 
+
+
+@yt_app.route('/ytl-api/video_comments')
+def get_video_comments():
+    '''The comments under a video on the watch page. comments.js asks for
+    them once they're scrolled to or opened.'''
+    video_id = request.args.get('v', '')
+    if not re.fullmatch(r'[\w-]{11}', video_id):
+        flask.abort(400)
+    comments_info = video_comments(video_id,
+                                   int(settings.default_comment_sorting),
+                                   lc=request.args.get('lc', ''))
+    return flask.render_template_string(
+        '{% import "comments.html" as comments with context %}'
+        '{{ comments.video_comments(comments_info) }}'
+        '{% if not comments_info.get("comments") and not comments_info.get("error") %}'
+        '<p class="comments-placeholder">No comments. They may be turned off for this video.</p>'
+        '{% endif %}',
+        comments_info=comments_info)
 
 
 @yt_app.route('/comments')

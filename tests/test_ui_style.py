@@ -67,23 +67,38 @@ def test_settings_page_hides_settings_that_dont_apply(client, monkeypatch,
     use_style(monkeypatch, ui_style)
     html = client.get('/settings').get_data(as_text=True)
     items = setting_items(html)
-    assert {name for name, is_hidden in items.items() if is_hidden} == hidden
+    hidden_now = {name for name, is_hidden in items.items() if is_hidden}
+    # the sign-in ones depend on "Sign in to YouTube", not the style
+    hidden_now -= {'youtube_sign_in_browser', 'youtube_cookies_file'}
+    assert hidden_now == hidden
     # hidden rows still send their value, so saving doesn't reset them
     assert 'theme' in items and 'color_scheme' in items
     assert 'data-shown-for="ui_style" data-shown-values="0"' in html
 
 
-@pytest.mark.parametrize('ui_style, sheets, has_theme_css', [
-    (0, [], True),
-    (1, ['modern_ui.css'], False),
-    (2, ['modern_ui.css', 'youtube_ui.css'], False),
+@pytest.mark.parametrize('ui_style, sheets, has_theme_css, scheme', [
+    # Classic has a light theme here, which the attribute follows instead of
+    # the Color scheme setting, which Classic doesn't use
+    (0, [], True, 'light'),
+    (1, ['modern_ui.css'], False, 'dark'),
+    (2, ['modern_ui.css', 'youtube_ui.css'], False, 'dark'),
 ])
-def test_style_sheets(client, monkeypatch, ui_style, sheets, has_theme_css):
+def test_style_sheets(client, monkeypatch, ui_style, sheets, has_theme_css,
+                      scheme):
     use_style(monkeypatch, ui_style, color_scheme=2)
+    monkeypatch.setattr(settings, 'theme', 0)
     html = client.get('/home').get_data(as_text=True)
     assert re.findall(r'/static/(\w+_ui\.css)', html) == sheets
     assert ('light_theme.css' in html) == has_theme_css
-    assert 'data-color-scheme="dark"' in html
+    assert 'data-color-scheme="%s"' % scheme in html
     # the new styles come after the page's own styles, to restyle them
     if sheets:
         assert html.index('</style>') < html.index(sheets[0])
+
+
+def test_classic_dark_theme_is_a_dark_color_scheme(client, monkeypatch):
+    use_style(monkeypatch, 0, color_scheme=1)
+    monkeypatch.setattr(settings, 'theme', 2)
+    html = client.get('/home').get_data(as_text=True)
+    assert 'dark_theme.css' in html
+    assert 'data-color-scheme="dark"' in html

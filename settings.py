@@ -3,13 +3,15 @@ import ast
 import re
 import os
 import collections
+import sys
+import urllib.parse
 
 import flask
 from flask import request
 
-# Hides the local playlists UI: the +Playlist button, the checkboxes on
-# videos, the home menu link and the homepage option. Set to True to bring
-# it back.
+# The old way of adding videos to playlists: a checkbox on each video and a
+# +Playlist form in the header. Videos are saved from the menu on each video
+# now (Save to playlist). Set to True to bring the checkboxes back.
 local_playlists_enabled = False
 
 SETTINGS_INFO = collections.OrderedDict([
@@ -73,6 +75,66 @@ SETTINGS_INFO = collections.OrderedDict([
         ],
         'category': 'appearance',
         'shown_for': ('ui_style', (0,)),
+    }),
+
+    ('youtube_sign_in', {
+        'type': int,
+        'default': 0,
+        'label': 'Sign in to YouTube',
+        'comment': '''When YouTube refuses a video to confirm this isn't a bot (or because of its age),
+ask for it again signed in. Needs Node.js installed.
+YouTube then knows that account watched those videos, and Google has suspended
+accounts used like this, so a spare account is safer.
+0 - Off
+1 - With Google, in my browser: uses the account a browser on this computer is signed in to
+2 - Cookies file: uses a cookies.txt file exported from a browser''',
+        'options': [
+            (0, 'Off'),
+            (1, 'With Google, in my browser'),
+            (2, 'Cookies file'),
+        ],
+        'category': 'network',
+        'description': ('Only for videos YouTube refuses with its bot check or for age; '
+                        'those are asked for again signed in. YouTube links them to the '
+                        'account, and Google has suspended accounts used this way, so '
+                        'a spare one is safer. Needs Node.js.'),
+    }),
+
+    ('youtube_sign_in_browser', {
+        'type': int,
+        'default': 0,
+        'label': 'Browser',
+        'comment': '''The browser whose YouTube sign-in is used
+0 - Automatic: the one used most recently
+1 - Brave
+2 - Chrome
+3 - Chromium
+4 - Firefox
+5 - LibreWolf''',
+        'options': [
+            (0, 'Automatic (used most recently)'),
+            (1, 'Brave'),
+            (2, 'Chrome'),
+            (3, 'Chromium'),
+            (4, 'Firefox'),
+            (5, 'LibreWolf'),
+        ],
+        'category': 'network',
+        'shown_for': ('youtube_sign_in', (1,)),
+        'description': 'Sign in to YouTube in that browser, then check here.',
+    }),
+
+    ('youtube_cookies_file', {
+        'type': str,
+        'default': '',
+        'label': 'Cookies file',
+        'comment': '''Path to a cookies.txt file (Netscape format) exported from a browser
+that's signed in to YouTube, for Sign in to YouTube = 2''',
+        'category': 'network',
+        'shown_for': ('youtube_sign_in', (2,)),
+        'description': ('Path to a cookies.txt file exported from a browser that\'s '
+                        'signed in to YouTube, with an extension like "Get cookies.txt '
+                        'LOCALLY".'),
     }),
 
     ('route_tor', {
@@ -196,6 +258,16 @@ Defaults to -1, which means no default value is forced and the browser will set 
         'comment': '''On: the description under a video is open.
 Off: it's closed until its bar is clicked, like the download list''',
         'category': 'interface',
+    }),
+
+    ('abbreviate_numbers', {
+        'label': 'Abbreviate numbers',
+        'type': bool,
+        'default': False,
+        'comment': '''On: counts are shortened, such as 1.5K views or 2.51M subscribers.
+Off: counts are shown in full, such as 1,523 views''',
+        'category': 'interface',
+        'description': 'Shows 1.5K views or 2.51M subscribers instead of the full count. Hover a count on the watch page to see it in full.',
     }),
 
     ('enable_comment_avatars', {
@@ -353,14 +425,11 @@ sent the id of each video you open.''',
         'comment': '''Page opened at the root address (for example localhost:8080)
 0 - Home menu
 1 - Subscriptions
-2 - Local playlists''',
+2 - Playlists''',
         'options': [
             (0, 'Home menu'),
             (1, 'Subscriptions'),
-            (2, 'Local playlists'),
-        ] if local_playlists_enabled else [
-            (0, 'Home menu'),
-            (1, 'Subscriptions'),
+            (2, 'Playlists'),
         ],
         'category': 'interface',
     }),
@@ -399,6 +468,23 @@ for India, or 30 with -3 hours for Newfoundland)''',
         'type': bool,
         'default': 0,
         'comment': '',
+    }),
+    ('subscription_check_pace', {
+        'type': int,
+        'default': 1,
+        'label': 'How often to check channels',
+        'comment': '''How often each channel is checked for new videos, going by how often it uploads.
+Every check is a request to YouTube.
+0 - Often: about 10 checks per upload
+1 - Normal: about 4 checks per upload, at most every 6 hours
+2 - Rarely: about 2 checks per upload, at most once a day''',
+        'options': [
+            (0, 'Often'),
+            (1, 'Normal'),
+            (2, 'Rarely'),
+        ],
+        'description': 'Each check is a request to YouTube. Normal makes about a third as many as Often; new videos can show up a few hours later.',
+        'shown_for': ('autocheck_subscriptions', (True,)),
     }),
     ('include_shorts_in_subscriptions', {
         'type': bool,
@@ -729,3 +815,46 @@ def settings_page():
         return flask.redirect(util.URL_ORIGIN + '/settings', 303)
     else:
         flask.abort(400)
+
+
+# Set by server.py when it runs its own server. Under uWSGI, gunicorn and the
+# like, restarting means something else and is up to them, so the buttons stay
+# hidden.
+server_controls_enabled = False
+
+def _restart_server():
+    sys.stdout.flush()
+    sys.stderr.flush()
+    # Replaces this process with a fresh copy of itself, keeping the same
+    # PID, log file and nohup. The listening socket isn't inherited, so the
+    # new copy can bind the port again.
+    args = getattr(sys, 'orig_argv', [sys.executable] + sys.argv)[1:]
+    os.execv(sys.executable, [sys.executable] + args)
+
+def _stop_server():
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(0)
+
+def server_control():
+    if not server_controls_enabled:
+        flask.abort(404)
+    # server.py only lets POSTs through from localhost, but a web page open in
+    # the browser can still submit a form here. Browsers send Origin with
+    # every form POST, so refuse ones from other sites.
+    origin = request.headers.get('Origin')
+    if origin and urllib.parse.urlsplit(origin).netloc != request.host:
+        flask.abort(403)
+
+    import gevent
+    action = request.form.get('action')
+    if action == 'Restart':
+        print('Restarting from the settings page')
+        # Waits so this page reaches the browser before the process goes away
+        gevent.spawn_later(0.5, _restart_server)
+        return flask.render_template('server_control.html', restarting=True)
+    elif action == 'Stop':
+        print('Stopping from the settings page')
+        gevent.spawn_later(0.5, _stop_server)
+        return flask.render_template('server_control.html', restarting=False)
+    flask.abort(400)

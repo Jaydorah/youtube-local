@@ -8,7 +8,7 @@ from youtube import util
 
 # these are just so the files get run - they import yt_app and add routes to it
 from youtube import (watch, search, playlist, channel, local_playlist,
-                     comments, subscriptions, watch_progress)
+                     comments, subscriptions, watch_progress, library)
 
 import settings
 
@@ -50,6 +50,12 @@ def parse_range(range_header, content_length):
     else:
         end_byte = int(end)
     return start_byte, end_byte
+
+# Thumbnails and avatars hardly ever change, but YouTube tells browsers to ask
+# again after a couple of hours. Keeping them for a week means seeing the same
+# video or channel again doesn't send another request to YouTube.
+LONG_CACHE_HOSTS = ('ytimg.com', 'ggpht.com', 'googleusercontent.com')
+IMAGE_MAX_AGE = 7*24*3600
 
 def proxy_site(env, start_response, video=False):
     send_headers = {
@@ -95,6 +101,13 @@ def proxy_site(env, start_response, video=False):
         if video:
             response_headers = (list(response_headers)
                                 +[('Access-Control-Allow-Origin', '*')])
+        elif (response.status == 200
+                and env['SERVER_NAME'].endswith(LONG_CACHE_HOSTS)):
+            response_headers = [
+                (name, value) for name, value in response_headers
+                if name.lower() not in ('cache-control', 'expires', 'pragma',
+                                        'age')
+            ] + [('Cache-Control', 'public, max-age=%d' % IMAGE_MAX_AGE)]
 
         if first_attempt:
             start_response(str(response.status) + ' ' + response.reason,
@@ -190,6 +203,12 @@ def split_url(url):
 
 
 
+# A video id is 11 characters and its last one carries only 4 bits, so it
+# comes from this smaller set. Used to tell youtu.be/<id> apart from a
+# legacy youtube.com/<custom> channel url.
+YOUTU_BE_PATH_RE = re.compile(r'/[\w-]{10}[AEIMQUYcgkosw048]')
+YOUTU_BE_QUERY_RE = re.compile(r'(?:^|&)(?:feature=youtu\.be|si=)')
+
 def error_code(code, start_response):
     start_response(code, ())
     return code.encode()
@@ -228,8 +247,28 @@ def site_dispatch(env, start_response):
         try:
             env['SERVER_NAME'], env['PATH_INFO'] = split_url(path[1:])
         except ValueError:
-            yield error_code('404 Not Found', start_response)
-            return
+            # Bare YouTube paths such as /watch?v=..., /@handle or /results,
+            # as produced by redirect extensions like LibRedirect that swap
+            # only the host of a youtube.com URL
+            try:
+                # WSGI hands over PATH_INFO as latin-1 decoded bytes
+                raw_path = path.encode('latin-1')
+            except UnicodeEncodeError:
+                raw_path = path.encode('utf-8')
+            host = 'www.youtube.com'
+            if YOUTU_BE_PATH_RE.fullmatch(path) and (
+                    YOUTU_BE_QUERY_RE.search(env['QUERY_STRING'])
+                    or not path[1:].isalpha()):
+                # youtu.be/<video_id> with only the host swapped
+                host = 'youtu.be'
+            location = ('/https://' + host
+                        + urllib.parse.quote(raw_path, safe="/@:!$&'()*+,;=~"))
+            if env['QUERY_STRING']:
+                location += '?' + env['QUERY_STRING']
+            if method in ('GET', 'HEAD'):
+                start_response('302 Found', [('Location', location)])
+                return
+            env['SERVER_NAME'], env['PATH_INFO'] = 'www.youtube.com', path
 
         base_name = ''
         for domain in reversed(env['SERVER_NAME'].split('.')):
@@ -289,6 +328,7 @@ class NoDelayWSGIServer(WSGIServer):
         super().handle(sock, address)
 
 if __name__ == '__main__':
+    settings.server_controls_enabled = True
     if settings.allow_foreign_addresses:
         server = NoDelayWSGIServer(('0.0.0.0', settings.port_number),
                                    site_dispatch, log=FilteredRequestLog())

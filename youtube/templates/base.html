@@ -4,6 +4,9 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <title>{{ page_title }}</title>
+        {# Lets CSS hide controls that only work with JavaScript, such as the
+           menu button on each video, before the page is drawn #}
+        <script>document.documentElement.classList.add('js')</script>
         <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; media-src 'self' blob: https://*.googlevideo.com;
             {{ "img-src 'self' https://*.googleusercontent.com https://*.ggpht.com https://*.ytimg.com;" if not settings.proxy_images else "" }}">
         <link href="/youtube.com/shared.css" type="text/css" rel="stylesheet">
@@ -29,8 +32,9 @@
         {% for sheet in ui_style_sheets %}
             <link href="{{ sheet }}" type="text/css" rel="stylesheet">
         {% endfor %}
+        <link href="/youtube.com/static/library.css" type="text/css" rel="stylesheet">
     </head>
-    <body>
+    <body data-library-version="{{ library_version() }}">
         {%- macro header_logo() -%}
             {%- if ui_style == 'youtube' -%}
                 <svg class="header-logo" viewBox="0 0 28 20" aria-hidden="true"><rect class="logo-back" x="0.5" y="0.5" width="27" height="19" rx="5.5"/><path class="logo-play" d="M11.2 5.8v8.4l7.1-4.2z"/></svg>
@@ -47,11 +51,18 @@
                         {% if ui_style == 'classic' %}
                             <a href="/youtube.com" id="home-link">Home</a>
                             <a href="/youtube.com/home" id="menu-link">Menu</a>
+                            <a href="/youtube.com/playlists" id="playlists-link">Playlists</a>
                         {% else %}
                             {# Opens the side menu (nav-drawer.js). Without JavaScript it
                                is a plain link to the menu page. #}
                             <a href="/youtube.com/home" id="menu-link" class="header-icon-button" title="Menu" aria-label="Menu"><svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></a>
                             <a href="/youtube.com" class="home-link" id="home-link">{{ header_logo() }}<span>Home</span></a>
+                            {# Opens the list of playlists (library.js). Without
+                               JavaScript it's a link to the Playlists page. The
+                               dot shows while Playlist mode is on, only on the
+                               watch page: the only page where it does anything. #}
+                            {% set playlist_mode_here = playlist_mode and request.path == '/watch' %}
+                            <a href="/youtube.com/playlists" id="library-button" class="{{ 'playlist-mode-on' if playlist_mode_here }}" title="{{ 'Playlist mode is adding clicked videos to ' + playlist_mode if playlist_mode_here else 'Your playlists' }}"><span class="library-button-icon"><svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h12M4 11h12M4 16h7M15 15v6l5-3z"/></svg><span class="library-button-dot" aria-hidden="true"></span></span><span>Playlist</span></a>
                         {% endif %}
                     </span>
                     <input type="search" name="search_query" class="search-box" value="{{ search_box_value }}"
@@ -139,7 +150,12 @@
                         <label for="playlist-form-toggle-cbox" class="playlist-form-toggle-button button">+Playlist</label>
                     {% endif %}
                     {% if ui_style != 'classic' %}
-                        <a href="/youtube.com/settings" id="settings-link" class="header-icon-button" title="Settings" aria-label="Settings">{{ gear_icon() }}</a>
+                        <span class="header-end">
+                            {# Lists the messages that popped up at the bottom
+                               left (notifications.js) #}
+                            <button type="button" id="notifications-button" class="header-icon-button" title="Notifications" aria-label="Notifications" aria-haspopup="dialog" aria-expanded="false" aria-controls="notifications-popover"><svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.75 2H4.25z"/><path d="M10 21a2.25 2.25 0 0 0 4 0"/></svg><span class="notifications-badge" aria-hidden="true" hidden></span></button>
+                            <a href="/youtube.com/settings" id="settings-link" class="header-icon-button" title="Settings" aria-label="Settings">{{ gear_icon() }}</a>
+                        </span>
                     {% endif %}
                 </form>
 
@@ -180,6 +196,9 @@
                         messageBox.setAttribute('id', 'message-box');
                         let textNode = document.createTextNode(text);
                         messageBox.appendChild(textNode);
+                        if(window.ytlNotifications){
+                            ytlNotifications.add(text, {error: error});
+                        }
                         document.querySelector('main').appendChild(messageBox);
                         let currentstyle = window.getComputedStyle(messageBox);
                         let removalDelay;
@@ -243,6 +262,8 @@
                 </script>
             {% endif %}
         </header>
+        {# Before the pages' own scripts, which add to it #}
+        <script src="/youtube.com/static/js/notifications.js" defer></script>
         {% if ui_style != 'classic' %}
             <dialog id="nav-drawer" aria-label="Menu">
                 <div class="drawer-inner">
@@ -255,9 +276,11 @@
                         <li><a href="/youtube.com"{{ ' aria-current="page"'|safe if request.path in ('/', '/home') }}><svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9v11h5v-6h4v6h5V9"/></svg><span>Home</span></a></li>
                         <li><a href="/youtube.com/subscriptions"{{ ' aria-current="page"'|safe if request.path in ('/subscriptions',) }}><svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M6 4.5h12M10.5 11.5v6l5-3z"/></svg><span>Subscriptions</span></a></li>
                         <li><a href="/youtube.com/subscription_manager"{{ ' aria-current="page"'|safe if request.path in ('/subscription_manager',) }}><svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></svg><span>Subscription manager</span></a></li>
-                        {% if local_playlists_enabled %}
-                        <li><a href="/youtube.com/playlists"{{ ' aria-current="page"'|safe if request.path.startswith('/playlists') }}><svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h12M4 11h12M4 16h7M15 15v6l5-3z"/></svg><span>Local playlists</span></a></li>
-                        {% endif %}
+                    </ul>
+                    <ul>
+                        <li><a href="/youtube.com/playlists"{{ ' aria-current="page"'|safe if request.path in ('/playlists', '/playlists/') }}><svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h12M4 11h12M4 16h7M15 15v6l5-3z"/></svg><span>Playlists</span></a></li>
+                        <li><a href="/youtube.com/playlists/Watch%20later"{{ ' aria-current="page"'|safe if request.path == '/playlists/Watch later' }}><svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.25 2"/></svg><span>Watch later</span></a></li>
+                        <li><a href="/youtube.com/queue"{{ ' aria-current="page"'|safe if request.path == '/queue' }}><svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 10h16M4 15h8M15 13.5v6l5-3z"/></svg><span>Queue</span></a></li>
                     </ul>
                     <ul>
                         <li><a href="/youtube.com/settings"{{ ' aria-current="page"'|safe if request.path in ('/settings',) }}>{{ gear_icon() }}<span>Settings</span></a></li>
@@ -273,5 +296,6 @@
 {% endblock %}
         </main>
         <script src="/youtube.com/static/js/watch-progress.js"></script>
+        <script src="/youtube.com/static/js/library.js" defer></script>
     </body>
 </html>

@@ -1,19 +1,70 @@
 {% set page_title = 'Unsubscribe?' %}
 {% extends "base.html" %}
+{% block style %}
+    .unsub-verify{
+        max-width: 640px;
+        margin: 0 auto;
+        padding: 20px 12px;
+    }
+        .unsub-verify h1{
+            font-size: 1.4rem;
+            margin: 0 0 6px;
+        }
+        .unsub-verify p{
+            margin: 0 0 15px;
+            opacity: 0.8;
+        }
+    .unsub-actions{
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 15px;
+    }
+    .unsub-list{
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        max-height: max(250px, calc(100vh - 300px));
+        overflow-y: auto;
+        background-color: var(--interface-color);
+        border-radius: 4px;
+    }
+        .unsub-list li{
+            padding: 7px 12px;
+            border-bottom: 1px solid var(--background-color);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .unsub-list li:last-child{
+            border-bottom: none;
+        }
+{% endblock style %}
 
 {% block main %}
-    <span>Are you sure you want to unsubscribe from these channels?</span>
-    <form class="subscriptions-import-form" action="/youtube.com/subscription_manager" method="POST">
-        {% for channel_id, channel_name in unsubscribe_list %}
-            <input type="hidden" name="channel_ids" value="{{ channel_id }}">
-        {% endfor %}
-
-        <input type="hidden" name="action" value="unsubscribe">
-        <input type="submit" value="Yes, unsubscribe">
-    </form>
-    <ul>
-        {% for channel_id, channel_name in unsubscribe_list %}
-            <li><a href="{{ '/https://www.youtube.com/channel/' + channel_id }}" title="{{ channel_name }}">{{ channel_name }}</a></li>
-        {% endfor %}
-    </ul>
+<div class="unsub-verify">
+    {% if unsubscribe_list %}
+        {% set n = unsubscribe_list|length %}
+        <h1>Unsubscribe from {{ n }} channel{{ 's' if n != 1 }}?</h1>
+        <p>Their saved videos are removed from your feed. This can't be undone, but you can subscribe again later.</p>
+        <form class="unsub-actions" action="/youtube.com/subscription_manager" method="POST">
+            {% for channel_id, channel_name in unsubscribe_list %}
+                <input type="hidden" name="channel_ids" value="{{ channel_id }}">
+            {% endfor %}
+            <input type="hidden" name="return_to" value="{{ return_to }}">
+            <button type="submit" name="action" value="unsubscribe">Unsubscribe</button>
+            <a class="sort-button" href="/youtube.com{{ return_to }}">Cancel</a>
+        </form>
+        <ul class="unsub-list">
+            {% for channel_id, channel_name in unsubscribe_list %}
+                <li><a href="/https://www.youtube.com/channel/{{ channel_id }}" title="{{ channel_name }}">{{ channel_name }}</a></li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <h1>Nothing to unsubscribe from</h1>
+        <p>Those channels aren't in your subscriptions anymore.</p>
+        <a class="sort-button" href="/youtube.com{{ return_to }}">Back</a>
+    {% endif %}
+</div>
 {% endblock main %}

@@ -88,6 +88,14 @@ def open_database():
         if 'video_type' not in video_columns:
             cursor.execute('ALTER TABLE videos ADD COLUMN video_type text')
 
+        # What YouTube said instead of the channel's videos the last time
+        # it was checked, such as that the channel was terminated. NULL if
+        # the last check worked. Network errors aren't saved here.
+        channel_columns = [row[1] for row in
+                           cursor.execute('PRAGMA table_info(subscribed_channels)')]
+        if 'check_error' not in channel_columns:
+            cursor.execute('ALTER TABLE subscribed_channels ADD COLUMN check_error text')
+
         # Where the user stopped watching each video, saved by the watch page
         cursor.execute('''CREATE TABLE IF NOT EXISTS watch_progress (
                               video_id text PRIMARY KEY,
@@ -283,7 +291,9 @@ def _get_channel_names(cursor, channel_ids):
         row = cursor.execute('''SELECT channel_name
                                 FROM subscribed_channels
                                 WHERE yt_channel_id = ?''', (channel_id,)).fetchone()
-        result.append( (channel_id, row[0]) )
+        # Already unsubscribed, such as from another tab
+        if row is not None:
+            result.append( (channel_id, row[0]) )
     return result
 
 
@@ -520,11 +530,15 @@ def _get_atoma_feed(channel_id):
     try:
         return util.fetch_url(url).decode('utf-8')
     except util.FetchError as e:
-        # 404 is expected for terminated channels
+        # 404 is expected for terminated channels. YouTube's feed server
+        # also often fails with a 5xx for a while. Either way the full
+        # check below doesn't need the feed.
         if e.code in ('404', '429'):
             return ''
-        if e.code == '502':
-            return str(e)
+        if e.code and e.code.startswith('5'):
+            print('Could not get the feed for '
+                  + channel_names.get(channel_id, channel_id) + ': ' + str(e))
+            return ''
         raise
 
 def _get_channel_videos_first_page(channel_id, channel_status_name):
@@ -722,6 +736,14 @@ def _feed_shows_changes(cursor, channel_id, feed_times):
 
     return False
 
+# subscription_check_pace -> (checks per upload, at least this long between
+# checks of a channel). Each check is a request to YouTube.
+CHECK_PACES = {
+    0: (10, 0),
+    1: (4, 6*3600),
+    2: (2, 24*3600),
+}
+
 def _next_check_time(times_published):
     '''When to automatically check a channel next. times_published is the
     published times of its videos, newest first.'''
@@ -736,13 +758,17 @@ def _next_check_time(times_published):
     # add some quantization and randomness to make pattern analysis by Youtube slightly harder
     quantized_upload_period = average_upload_period - (average_upload_period % (4*3600)) + 4*3600   # round up to nearest 4 hours
     randomized_upload_period = quantized_upload_period*(1 + secrets.randbelow(50)/50*0.5) # randomly between 1x and 1.5x
-    next_check_delay = randomized_upload_period/10    # check at 10x the channel posting rate. might want to fine tune this number
+    checks_per_upload, min_delay = CHECK_PACES.get(
+        settings.subscription_check_pace, CHECK_PACES[1])
+    next_check_delay = max(randomized_upload_period/checks_per_upload,
+                           min_delay*(1 + secrets.randbelow(25)/100))
     return int(time.time() + next_check_delay)
 
 def _record_check(cursor, channel_id, next_check_time):
     '''Saves that the channel was just checked and when to check it next'''
     cursor.execute('''UPDATE subscribed_channels
-                      SET time_last_checked = ?, next_check_time = ?
+                      SET time_last_checked = ?, next_check_time = ?,
+                          check_error = NULL
                       WHERE yt_channel_id=?''', [int(time.time()), next_check_time, channel_id])
 
     if settings.autocheck_subscriptions:
@@ -871,6 +897,11 @@ def _get_upstream_videos(channel_id):
         return
     if channel_info['error']:
         print('Error checking channel ' + channel_status_name + ': ' + channel_info['error'])
+        with open_database() as connection:
+            with connection as cursor:
+                cursor.execute('''UPDATE subscribed_channels SET check_error = ?
+                                  WHERE yt_channel_id = ?''',
+                               [channel_info['error'], channel_id])
         return
 
     videos = channel_info['items']
@@ -1292,8 +1323,80 @@ def export_subscriptions():
         return '400 Bad Request', 400
 
 
+INACTIVE_AFTER = 365*24*3600
+
+def _get_cleanup_groups(cursor):
+    '''Channels worth unsubscribing from: ones YouTube says are gone, and
+    ones with no uploads in over a year. Both only know what the last check
+    of each channel found.'''
+    dead = []
+    for channel_id, channel_name, muted, error in cursor.execute(
+            '''SELECT yt_channel_id, channel_name, muted, check_error
+               FROM subscribed_channels
+               WHERE check_error IS NOT NULL
+               ORDER BY channel_name COLLATE NOCASE'''):
+        dead.append({
+            'channel_url': util.URL_ORIGIN + '/channel/' + channel_id,
+            'channel_name': channel_name,
+            'channel_id': channel_id,
+            'muted': muted,
+            'tags': [],
+            'note': error,
+            'checked': True,
+        })
+
+    inactive = []
+    cutoff = int(time.time()) - INACTIVE_AFTER
+    for channel_id, channel_name, muted, last_upload in cursor.execute(
+            '''SELECT yt_channel_id, channel_name, muted,
+                      (SELECT MAX(time_published) FROM videos
+                       WHERE sql_channel_id = subscribed_channels.id)
+                          AS last_upload
+               FROM subscribed_channels
+               WHERE check_error IS NULL AND time_last_checked > 0
+                   AND (last_upload IS NULL OR last_upload < ?)
+               ORDER BY last_upload IS NOT NULL, last_upload''', [cutoff]):
+        if last_upload is None:
+            note = 'No uploads'
+        else:
+            note = 'Last upload ' + time.strftime(
+                '%b %Y', time.localtime(last_upload))
+        inactive.append({
+            'channel_url': util.URL_ORIGIN + '/channel/' + channel_id,
+            'channel_name': channel_name,
+            'channel_id': channel_id,
+            'muted': muted,
+            'tags': [],
+            'note': note,
+            'checked': False,
+        })
+
+    never_checked = cursor.execute(
+        '''SELECT COUNT(*) FROM subscribed_channels
+           WHERE time_last_checked IS NULL OR time_last_checked = 0'''
+    ).fetchone()[0]
+
+    return [
+        ('Deleted, terminated or unavailable', dead),
+        ('No uploads in over a year', inactive),
+    ], never_checked
+
+
 @yt_app.route('/subscription_manager', methods=['GET'])
 def get_subscription_manager_page():
+    if request.args.get('view') == 'cleanup':
+        with open_database() as connection:
+            with connection as cursor:
+                tag_groups, never_checked = _get_cleanup_groups(cursor)
+        total = sum(len(group) for _, group in tag_groups)
+        return flask.render_template('subscription_manager.html',
+            total = total,
+            cleanup = True,
+            never_checked = never_checked,
+            group_by_tags = True,
+            tag_groups = tag_groups,
+        )
+
     group_by_tags = request.args.get('group_by_tags', '0') == '1'
     with open_database() as connection:
         with connection as cursor:
@@ -1380,7 +1483,9 @@ def post_subscription_manager_page():
                 _unsubscribe(cursor, request.values.getlist('channel_ids'))
             elif action == 'unsubscribe_verify':
                 unsubscribe_list = _get_channel_names(cursor, request.values.getlist('channel_ids'))
-                return flask.render_template('unsubscribe_verify.html', unsubscribe_list = unsubscribe_list)
+                return flask.render_template('unsubscribe_verify.html',
+                    unsubscribe_list = unsubscribe_list,
+                    return_to = request.full_path.rstrip('?'))
 
             elif action == 'mute':
                 cursor.executemany('''UPDATE subscribed_channels
@@ -1393,7 +1498,12 @@ def post_subscription_manager_page():
             else:
                 flask.abort(400)
 
-    return flask.redirect(util.URL_ORIGIN + request.full_path, 303)
+    # The confirmation page sends back the page it was opened from, such as
+    # the "Remove dead" view
+    return_to = request.values.get('return_to', '')
+    if not return_to.startswith('/subscription_manager'):
+        return_to = request.full_path
+    return flask.redirect(util.URL_ORIGIN + return_to, 303)
 
 FEED_FILTERS_COOKIE = 'subscriptions_feed_hide'
 # Set by subscriptions.js when the sidebar is hidden

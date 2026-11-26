@@ -38,6 +38,26 @@
                 .setting-control{
                     min-width: 0;
                 }
+                .sign-in-controls{
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 8px;
+                    margin-top: 8px;
+                }
+                .setting-control .sign-in-status{
+                    max-width: 19rem;
+                    margin: 8px 0px 0px 0px;
+                    font-size: 0.85rem;
+                }
+                .sign-in-status:empty{
+                    display: none;
+                }
+                .sign-in-status.is-signed-in::before{
+                    content: "\2713  ";
+                }
+    .settings-form.server-control-form{
+        padding-top: 0px;
+    }
     @media (max-width:650px){
         h2{
             text-align: center;
@@ -99,6 +119,13 @@
                     {% else %}
                         <span>Error: Unknown setting type: {{ setting_info['type'].__name__ }}</span>
                     {% endif %}
+                    {% if setting_name == 'youtube_sign_in_browser' %}
+                        <div class="sign-in-controls">
+                            <a class="button" href="https://accounts.google.com/ServiceLogin?service=youtube&amp;passive=true&amp;continue=https%3A%2F%2Fwww.youtube.com%2F" target="_blank" rel="noopener noreferrer">Sign in with Google</a>
+                            <button type="button" class="sign-in-check">Check sign-in</button>
+                        </div>
+                        <p class="sign-in-status" role="status" aria-live="polite"></p>
+                    {% endif %}
                     </div>
                 </li>
             {% endfor %}
@@ -110,5 +137,32 @@
             <input type="submit" value="Save settings" class="settings-save">
         </div>
     </form>
+    {% if settings.server_controls_enabled %}
+    <form method="POST" action="/youtube.com/settings/server" class="settings-form server-control-form">
+        <section class="settings-section">
+        <h2>Server</h2>
+        <ul class="settings-list">
+            <li class="setting-item">
+                <div class="setting-text">
+                    <span>Restart server</span>
+                    <p class="setting-help">Reloads the code, for after an update. Open pages come back once it's running again.</p>
+                </div>
+                <div class="setting-control">
+                    <input type="submit" name="action" value="Restart">
+                </div>
+            </li>
+            <li class="setting-item">
+                <div class="setting-text">
+                    <span>Stop server</span>
+                    <p class="setting-help">Shuts youtube-local down. It stays off until you start it again.</p>
+                </div>
+                <div class="setting-control">
+                    <input type="submit" name="action" value="Stop" class="server-stop">
+                </div>
+            </li>
+        </ul>
+        </section>
+    </form>
+    {% endif %}
     <script src="/youtube.com/static/js/settings.js"></script>
 {% endblock main %}

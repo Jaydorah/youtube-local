@@ -5,7 +5,7 @@
         <div class="comment">
             <a class="author-avatar" href="{{ comment['author_url'] }}" title="{{ comment['author'] }}">
                 {% if include_avatar %}
-                    <img class="author-avatar-img" src="{{ comment['author_avatar'] }}">
+                    <img class="author-avatar-img" src="{{ comment['author_avatar'] }}" loading="lazy" alt="">
                 {% endif %}
             </a>
             <address class="author-name">

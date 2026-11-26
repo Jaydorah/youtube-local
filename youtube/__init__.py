@@ -20,6 +20,7 @@ yt_app.jinja_env.add_extension('jinja2.ext.do') # why
 yt_app.jinja_env.globals['local_playlists_enabled'] = settings.local_playlists_enabled
 
 yt_app.add_url_rule('/settings', 'settings_page', settings.settings_page, methods=['POST', 'GET'])
+yt_app.add_url_rule('/settings/server', 'server_control', settings.server_control, methods=['POST'])
 
 HOMEPAGE_PATHS = {
     1: '/youtube.com/subscriptions',
@@ -29,8 +30,6 @@ HOMEPAGE_PATHS = {
 @yt_app.route('/')
 def homepage():
     target = HOMEPAGE_PATHS.get(settings.homepage)
-    if target == HOMEPAGE_PATHS[2] and not settings.local_playlists_enabled:
-        target = None
     if target:
         return flask.redirect(target, 302)
     return home_menu()
@@ -71,12 +70,21 @@ ui_style_sheets = {
 
 @yt_app.context_processor
 def inject_theme_preference():
+    from youtube import library
     ui_style = ui_style_names.get(settings.ui_style, 'modern')
+    if ui_style == 'classic':
+        # The Classic style has themes instead, so the attribute says how
+        # dark the theme is, for the styles shared by all of them
+        color_scheme = 'dark' if settings.theme == 2 else 'light'
+    else:
+        color_scheme = color_scheme_names.get(settings.color_scheme, 'system')
     return {
+        # shown on the Playlists button in the header while it's on
+        'playlist_mode': library.playlist_mode() if request else None,
         'theme_path': '/youtube.com/static/' + theme_names[settings.theme] + '.css',
         'ui_style': ui_style,
         'ui_style_sheets': ui_style_sheets[ui_style],
-        'color_scheme': color_scheme_names.get(settings.color_scheme, 'system'),
+        'color_scheme': color_scheme,
         'settings': settings,
         'utc_offset_seconds': time_display.utc_offset_seconds(),
         'utc_offset_name': time_display.utc_offset_name(),
@@ -92,6 +100,16 @@ def commatize(num):
         except ValueError:
             return num
     return '{:,}'.format(num)
+
+yt_app.add_template_filter(util.format_count, 'count')
+
+# The icon sprite almost never changes and library.js draws icons from it on
+# every page, so the browser keeps it instead of asking again each time
+def get_send_file_max_age(filename):
+    if filename == 'icons.svg':
+        return 24*3600
+    return None
+yt_app.get_send_file_max_age = get_send_file_max_age
 
 @yt_app.template_filter('iso_utc')
 def iso_utc(unix_time):

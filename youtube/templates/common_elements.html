@@ -14,8 +14,21 @@
     {%- endif -%}
 {% endmacro %}
 
-{% macro item(info, description=false, horizontal=true, include_author=true, include_badges=true, lazy_load=false, include_checkbox=true) %}
-    <div class="item-box {{ info['type'] + '-item-box' }} {{'horizontal-item-box' if horizontal else 'vertical-item-box'}} {{'has-description' if description else 'no-description'}}">
+{% macro icon(name) -%}
+    <svg class="icon" aria-hidden="true" focusable="false"><use href="/youtube.com/static/icons.svg#{{ name }}"></use></svg>
+{%- endmacro %}
+
+{# hideable: the menu offers Hide, which takes the video off the page until
+   it's reloaded. Off for the user's own playlists and the queue.
+   menu_context: extra menu entries, "playlist:<name>" or "queue" #}
+{% macro item(info, description=false, horizontal=true, include_author=true, include_badges=true, lazy_load=false, include_checkbox=true, hideable=true, menu_context='') %}
+    {% set is_video = info['type'] == 'video' and info.get('id') %}
+    <div class="item-box {{ info['type'] + '-item-box' }} {{'horizontal-item-box' if horizontal else 'vertical-item-box'}} {{'has-description' if description else 'no-description'}}"
+        {%- if is_video and not info['error'] %} data-video-id="{{ info['id'] }}"
+            {%- if info.get('video_info') %} data-video-info="{{ info['video_info'] }}"{% endif %}
+            {%- if menu_context %} data-menu-context="{{ menu_context }}"{% endif %}
+            {%- if not hideable %} data-no-hide{% endif %}
+        {%- endif %}>
         {% if info['error'] %}
             {{ info['error'] }}
         {% else %}
@@ -24,14 +37,14 @@
                     {% if lazy_load %}
                         <img class="thumbnail-img lazy" data-src="{{ info['thumbnail'] }}">
                     {% else %}
-                        <img class="thumbnail-img" src="{{ info['thumbnail'] }}">
+                        <img class="thumbnail-img" src="{{ info['thumbnail'] }}" loading="lazy" alt="">
                     {% endif %}
                     {% if is_new_video(info) %}
                         <span class="new-badge">NEW</span>
                     {% endif %}
-                    {% if info['type'] != 'channel' %}
+                    {% if info['type'] == 'playlist' or (info['type'] != 'channel' and info['duration']) %}
                         <div class="thumbnail-info">
-                            <span>{{ (info['video_count']|commatize + ' videos') if info['type'] == 'playlist' else info['duration'] }}</span>
+                            <span>{{ (info['video_count']|count + ' videos') if info['type'] == 'playlist' else info['duration'] }}</span>
                         </div>
                     {% endif %}
                 </a>
@@ -47,11 +60,11 @@
                     {% endif %}
                     <ul class="stats {{'horizontal-stats' if horizontal else 'vertical-stats'}}">
                         {% if info['type'] == 'channel' %}
-                            <li><span>{{ info['approx_subscriber_count'] }} subscribers</span></li>
-                            <li><span>{{ info['video_count']|commatize }} videos</span></li>
+                            <li><span>{{ info['approx_subscriber_count']|count }} subscribers</span></li>
+                            <li><span>{{ info['video_count']|count }} videos</span></li>
                         {% else %}
                             {% if info.get('approx_view_count') %}
-                                <li><span class="views">{{ info['approx_view_count'] }} views</span></li>
+                                <li><span class="views">{{ info['approx_view_count']|count }} views</span></li>
                             {% endif %}
                             {% if info.get('timestamp') is not none %}
                                 {# Subscriptions: how long ago, and the date and time #}
@@ -69,6 +82,10 @@
                     {% endif %}
                     {% if include_badges %}
                         <span class="badges">{{ info['badges']|join(' | ') }}</span>
+                    {% endif %}
+                    {% if is_video %}
+                        {# library.js opens the menu; hidden without JavaScript #}
+                        <button type="button" class="item-menu-button" aria-label="Action menu" aria-haspopup="menu" aria-expanded="false">{{ icon('more') }}</button>
                     {% endif %}
                 </div>
             </div>

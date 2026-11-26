@@ -1,0 +1,109 @@
+{# Pieces of the playlist pages and the watch page's side column. Import
+   "with context" so playlist_mode (from the Playlist mode cookie) is set. #}
+{% import "common_elements.html" as common_elements %}
+
+{% macro icon(name) -%}
+    {{ common_elements.icon(name) }}
+{%- endmacro %}
+
+{% macro plural(count, word) -%}
+    {{ count }} {{ word }}{{ 's' if count != 1 }}
+{%- endmacro %}
+
+{# The message after a form on the playlist pages was sent #}
+{% macro page_message(message) %}
+    {% if message and message.text %}
+        <p class="page-message{{ ' is-error' if message.is_error }}" role="{{ 'alert' if message.is_error else 'status' }}">{{ message.text }}</p>
+    {% endif %}
+{% endmacro %}
+
+{# A playlist (or the queue) on the Playlists page #}
+{% macro playlist_card(summary, kind='playlist') %}
+    {% set count = summary['video_count'] %}
+    <article class="library-card{{ ' is-empty' if not count }}{{ ' is-queue' if kind == 'queue' }}">
+        <a class="library-card-thumb" href="{{ summary['url'] }}" tabindex="-1" aria-hidden="true">
+            {% if summary['thumbnail'] %}
+                <img src="{{ summary['thumbnail'] }}" alt="" loading="lazy">
+            {% else %}
+                <span class="library-card-placeholder">{{ icon('queue' if kind == 'queue' else ('clock' if summary['is_watch_later'] else 'playlist')) }}</span>
+            {% endif %}
+            <span class="library-card-count">{{ icon('queue' if kind == 'queue' else 'playlist') }}{{ plural(count, 'video') }}</span>
+        </a>
+        {% if summary['play_url'] %}
+            <a class="library-card-play" href="{{ summary['play_url'] }}">{{ icon('play') }}<span>{{ 'Play' if kind == 'queue' else 'Play all' }}</span></a>
+        {% endif %}
+        <h2 class="library-card-title"><a href="{{ summary['url'] }}">{{ summary['name'] }}</a></h2>
+        <p class="library-card-meta">
+            {% if kind == 'queue' %}
+                {{ 'Plays next, before Autoplay' if count else 'Empty' }}
+            {% elif summary['is_watch_later'] and not count %}
+                Saved for later
+            {% else %}
+                {%- if summary['total_duration'] %}<span>{{ summary['total_duration'] }}</span>{% endif -%}
+                {%- if summary['time_updated'] %}<span class="meta-updated">Updated {{ summary['time_updated']|relative_time }}</span>{% endif -%}
+            {% endif %}
+            {% if kind == 'playlist' and playlist_mode == summary['name'] %}
+                <span class="playlist-mode-badge">Playlist mode</span>
+            {% endif %}
+        </p>
+    </article>
+{% endmacro %}
+
+{# The queue beside the video on the watch page. library.js redraws it from
+   /ytl-api/queue_panel when the queue changes. #}
+{% macro queue_panel(videos) %}
+    {% if videos %}
+        <section class="queue-panel" id="queue-panel" aria-labelledby="queue-panel-title">
+            <div class="queue-panel-header">
+                <div class="queue-panel-heading">
+                    <h3 id="queue-panel-title"><a href="/youtube.com/queue">Queue</a></h3>
+                    <span class="queue-panel-count">{{ plural(videos|length, 'video') }} · plays next</span>
+                </div>
+                <form method="post" action="/youtube.com/queue" class="queue-panel-clear" data-queue-clear>
+                    <button type="submit" name="action" value="clear" class="lib-button lib-button-small">Clear</button>
+                </form>
+            </div>
+            <ol class="queue-panel-items playlist-rows" data-sortable="queue">
+                {% for video in videos %}
+                    <li class="playlist-row" data-video-id="{{ video['id'] }}">
+                        <span class="playlist-row-handle" aria-hidden="true">{{ icon('drag') }}</span>
+                        {{ common_elements.item(video, include_badges=false, include_checkbox=false, hideable=false, menu_context='queue') }}
+                    </li>
+                {% endfor %}
+            </ol>
+        </section>
+    {% endif %}
+{% endmacro %}
+
+{# Beside Autoplay on the watch page. While it's on, clicking a video on the
+   watch page adds it to the chosen playlist instead of opening it. Other
+   pages don't have this switch, so videos open as usual there. library.js
+   keeps the cookie and handles the clicks. #}
+{% macro playlist_mode_control(playlist_names) %}
+    {% set names = [] %}
+    {% for name in ['Watch later'] + playlist_names|list + ([playlist_mode] if playlist_mode else []) %}
+        {% if name not in names %}{% do names.append(name) %}{% endif %}
+    {% endfor %}
+    <div class="playlist-mode{{ ' is-on' if playlist_mode }}" id="playlist-mode">
+        <label class="up-next-toggle" for="playlist-mode-toggle">
+            <span class="up-next-label">
+                <span class="up-next-name">Playlist mode</span>
+                <span class="up-next-help">Clicking a video adds it instead of opening it</span>
+            </span>
+            <input type="checkbox" id="playlist-mode-toggle" class="setting-switch"{{ ' checked' if playlist_mode }}>
+        </label>
+        <div class="playlist-mode-target">
+            <label for="playlist-mode-select">Add to</label>
+            <select id="playlist-mode-select">
+                {% for name in names %}
+                    <option value="{{ name }}"{{ ' selected' if name == playlist_mode }}>{{ name }}</option>
+                {% endfor %}
+                <option value="" data-new-playlist>New playlist…</option>
+            </select>
+            <a class="playlist-mode-open" href="{{ '/youtube.com/playlists/' + (playlist_mode or 'Watch later')|urlencode }}" title="Open the playlist" aria-label="Open the playlist">{{ icon('chevron-right') }}</a>
+        </div>
+        <p class="playlist-mode-status" role="status">
+            {%- if playlist_mode %}Click a video to add it to {{ playlist_mode }}{% endif -%}
+        </p>
+    </div>
+{% endmacro %}

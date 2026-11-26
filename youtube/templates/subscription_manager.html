@@ -180,6 +180,17 @@
                 .muted-badge{
                     border-style: dashed;
                 }
+                .note-badge{
+                    font-size: 0.8rem;
+                    opacity: 0.75;
+                    white-space: normal;
+                    text-align: right;
+                }
+
+    .cleanup-help{
+        margin: 0 0 12px;
+        opacity: 0.8;
+    }
 
     .no-results{
         padding: 20px 12px;
@@ -193,9 +204,10 @@
     <ol class="sub-list">
     {% for subscription in sub_list %}
         <li class="sub-list-item {{ 'muted' if subscription['muted'] else '' }}" data-search="{{ (subscription['channel_name'] ~ ' ' ~ ' '.join(subscription['tags']))|lower }}">
-            <input class="sub-list-checkbox" name="channel_ids" value="{{ subscription['channel_id'] }}" form="subscription-manager-form" type="checkbox" aria-label="Select {{ subscription['channel_name'] }}">
+            <input class="sub-list-checkbox" name="channel_ids" value="{{ subscription['channel_id'] }}" form="subscription-manager-form" type="checkbox"{{ ' checked' if subscription['checked'] }} aria-label="Select {{ subscription['channel_name'] }}">
             <a href="{{ subscription['channel_url'] }}" class="sub-list-item-name" title="{{ subscription['channel_name'] }}">{{ subscription['channel_name'] }}</a>
             <span class="tag-list">
+                {% if subscription['note'] %}<span class="note-badge">{{ subscription['note'] }}</span>{% endif %}
                 {% if subscription['muted'] %}<span class="muted-badge">muted</span>{% endif %}
                 {% for tag in subscription['tags'] %}<span class="tag">{{ tag }}</span>{% endfor %}
             </span>
@@ -209,8 +221,21 @@
 {% block main %}
 <div class="sub-manager">
     <div class="sub-manager-header">
-        <h1>Subscriptions <span class="sub-count">({{ total }})</span></h1>
+        {% if cleanup %}
+            <h1>Remove dead subscriptions <span class="sub-count">({{ total }})</span></h1>
+            <a class="sort-button" href="/youtube.com/subscription_manager">Back to all subscriptions</a>
+        {% else %}
+            <h1>Subscriptions <span class="sub-count">({{ total }})</span></h1>
+            <a class="sort-button" href="/youtube.com/subscription_manager?view=cleanup">Remove dead</a>
+        {% endif %}
     </div>
+
+    {% if cleanup %}
+    <p class="cleanup-help">
+        Based on the last check of each channel. Deleted and terminated channels are selected; review the inactive ones before unsubscribing.
+        {% if never_checked %}{{ never_checked }} channel{{ 's have' if never_checked != 1 else ' has' }} never been checked and {{ 'are' if never_checked != 1 else 'is' }} not listed.{% endif %}
+    </p>
+    {% else %}
 
     <details class="import-export">
         <summary>Import / Export</summary>
@@ -236,11 +261,13 @@
             </form>
         </div>
     </details>
+    {% endif %}
 
     <div class="sub-panel">
         <div class="sub-list-controls">
             <input type="search" class="sub-filter" id="sub-filter" placeholder="Filter channels or tags..." aria-label="Filter channels">
-            {% if group_by_tags %}
+            {% if cleanup %}
+            {% elif group_by_tags %}
                 <a class="sort-button" href="/https://www.youtube.com/subscription_manager?group_by_tags=0">Don't group</a>
             {% else %}
                 <a class="sort-button" href="/https://www.youtube.com/subscription_manager?group_by_tags=1">Group by tags</a>
@@ -250,9 +277,11 @@
         <form id="subscription-manager-form" class="selection-bar" method="POST">
             <label class="select-all-label"><input type="checkbox" id="select-all">Select all</label>
             <span class="selected-count" id="selected-count">0 selected</span>
+            {% if not cleanup %}
             <input type="text" name="tags" placeholder="Comma-separated tags">
             <button type="submit" name="action" value="add_tags" data-needs-selection>Add tags</button>
             <button type="submit" name="action" value="remove_tags" data-needs-selection>Remove tags</button>
+            {% endif %}
             <button type="submit" name="action" value="mute" data-needs-selection>Mute</button>
             <button type="submit" name="action" value="unmute" data-needs-selection>Unmute</button>
             <button type="submit" name="action" value="unsubscribe_verify" data-needs-selection>Unsubscribe</button>
@@ -261,7 +290,7 @@
 
         <div class="sub-scroll" id="sub-scroll">
             {% if group_by_tags %}
-                {% for tag_name, group_list in tag_groups %}
+                {% for tag_name, group_list in tag_groups if group_list %}
                     <section class="tag-group">
                         <h2 class="tag-group-name">{{ tag_name }} <span class="sub-count">{{ group_list|length }}</span></h2>
                         {{ subscription_list(group_list) }}
@@ -271,7 +300,7 @@
                 {{ subscription_list(sub_list) }}
             {% endif %}
             <div class="no-results" id="no-results" {{ '' if total == 0 else 'hidden' }}>
-                {{ 'No subscriptions yet.' if total == 0 else 'No channels match.' }}
+                {% if total == 0 %}{{ 'Nothing to clean up.' if cleanup else 'No subscriptions yet.' }}{% else %}No channels match.{% endif %}
             </div>
         </div>
     </div>

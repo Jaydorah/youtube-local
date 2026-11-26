@@ -171,8 +171,9 @@ a.page-button:hover{
 /* Videos: no card backgrounds */
 .item{
     background-color: transparent;
-    border-radius: 0px;
+    border-radius: var(--radius);
     overflow: visible;
+    --item-outline-offset: 6px;
 }
     .item .title{
         font-weight: 500;

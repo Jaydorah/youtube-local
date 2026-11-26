@@ -105,107 +105,202 @@ if (data.playlist && data.playlist['id'] !== null) {
 }
 
 
-// Autoplay
-if (data.settings.related_videos_mode !== 0 || data.playlist !== null) {
-    let playability_error = !!data.playability_error;
-    let isPlaylist = false;
-    if (data.playlist !== null && data.playlist['current_index'] !== null)
-        isPlaylist = true;
-
-    // read cookies on whether to autoplay
-    // https://developer.mozilla.org/en-US/docs/Web/API/Document/cookie
-    let cookieValue;
-    let playlist_id;
-    if (isPlaylist) {
-        // from https://stackoverflow.com/a/6969486
-        function escapeRegExp(string) {
-            // $& means the whole matched string
-            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        }
-        playlist_id = data.playlist['id'];
-        playlist_id = escapeRegExp(playlist_id);
-
-        cookieValue = document.cookie.replace(new RegExp(
-            '(?:(?:^|.*;\\s*)autoplay_'
-            + playlist_id + '\\s*\\=\\s*([^;]*).*$)|^.*$'
-        ), '$1');
-    } else {
-        cookieValue = document.cookie.replace(new RegExp(
-            '(?:(?:^|.*;\\s*)autoplay\\s*\\=\\s*([^;]*).*$)|^.*$'
-        ),'$1');
-    }
-
-    let autoplayEnabled = 0;
-    if(cookieValue.length === 0){
-        autoplayEnabled = 0;
-    } else {
-        autoplayEnabled = Number(cookieValue);
-    }
-
-    // check the checkbox if autoplay is on
+// Up next. When the video ends, the first queued video plays, whatever
+// Autoplay is set to. Without a queue, Autoplay goes on to the next video in
+// the playlist, or else the first related video.
+(function() {
+    let isPlaylist = data.playlist !== null && data.playlist['current_index'] !== null;
     let checkbox = document.querySelector('#autoplay-toggle');
-    if(autoplayEnabled){
-        checkbox.checked = true;
+
+    // https://developer.mozilla.org/en-US/docs/Web/API/Document/cookie
+    function escapeRegExp(string) {
+        // from https://stackoverflow.com/a/6969486
+        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+    function readCookie(name) {
+        let match = document.cookie.match(new RegExp(
+            '(?:^|;\\s*)' + escapeRegExp(name) + '\\s*=\\s*([^;]*)'));
+        return match ? match[1] : '';
     }
 
-    // listen for checkbox to turn autoplay on and off
-    let cookie = 'autoplay'
+    // Remembered separately for each playlist
+    let cookie = 'autoplay';
     if (isPlaylist)
-        cookie += '_' + playlist_id;
-
-    checkbox.addEventListener( 'change', function() {
-        if(this.checked) {
-            autoplayEnabled = 1;
-            document.cookie = cookie + '=1; SameSite=Strict';
-        } else {
-            autoplayEnabled = 0;
-            document.cookie = cookie + '=0; SameSite=Strict';
-        }
-    });
-
-    if(!playability_error){
-        // play the video if autoplay is on
-        if(autoplayEnabled){
-            video.play();
-        }
+        cookie += '_' + data.playlist['id'];
+    let autoplayEnabled = Boolean(checkbox) && Number(readCookie(cookie)) === 1;
+    if (checkbox) {
+        checkbox.checked = autoplayEnabled;
+        checkbox.addEventListener('change', function() {
+            autoplayEnabled = this.checked;
+            document.cookie = cookie + '=' + (this.checked ? '1' : '0') + '; SameSite=Strict';
+        });
     }
 
-    // determine next video url
-    let nextVideoUrl;
-    if (isPlaylist) {
-        let currentIndex = data.playlist['current_index'];
-        if (data.playlist['current_index']+1 == data.playlist['items'].length)
-            nextVideoUrl = null;
-        else
-            nextVideoUrl = data.playlist['items'][data.playlist['current_index']+1]['url'];
+    // play the video if autoplay brought us here
+    if (autoplayEnabled && !data.playability_error && video)
+        video.play();
 
+    let autoplayUrl = null;
+    function findAutoplayUrl() {
+        if (isPlaylist) {
+            let next = data.playlist['items'][data.playlist['current_index'] + 1];
+            autoplayUrl = next ? next['url'] : null;
+        } else {
+            autoplayUrl = data.related.length ? data.related[0]['url'] : null;
+        }
+    }
+    findAutoplayUrl();
+
+    if (isPlaylist) {
         // scroll playlist to proper position
         // item height + gap == 100
         let pl = document.querySelector('.playlist-videos');
-        pl.scrollTop = 100*currentIndex;
-    } else {
-        if (data.related.length === 0)
-            nextVideoUrl = null;
-        else
-            nextVideoUrl = data.related[0]['url'];
+        if (pl)
+            pl.scrollTop = 100*data.playlist['current_index'];
     }
-    let nextVideoDelay = 1000;
+
+    // library.js tells us when the queue changes, or a related video is
+    // hidden for this visit
+    let queueLength = data.queue_length || 0;
+    document.addEventListener('ytl:queue', function(e) {
+        queueLength = e.detail.count;
+    });
+    document.addEventListener('ytl:hidden', function(e) {
+        data.related = data.related.filter(function(item) {
+            return item.id !== e.detail.id;
+        });
+        findAutoplayUrl();
+    });
+
+    function nextUrl() {
+        if (queueLength > 0)
+            return '/youtube.com/queue/play';
+        return autoplayEnabled ? autoplayUrl : null;
+    }
+    function goToNextVideo() {
+        let url = nextUrl();
+        if (!url)
+            return;
+        window.location.href = url;
+    }
+    function videoEnded() {
+        window.setTimeout(goToNextVideo, 1000);
+    }
 
     // go to next video when video ends
     // https://stackoverflow.com/a/2880950
-    if (nextVideoUrl) {
-        if(playability_error){
+    // A video YouTube won't give out (deleted, private) is skipped. Not when
+    // it's the bot check though: the next one would be refused as well, and
+    // skipping would run through the whole queue or playlist, sending
+    // YouTube more requests and keeping the block going.
+    if (data.playability_error) {
+        if (!data.bot_check)
             videoEnded();
-        } else {
-            video.addEventListener('ended', videoEnded, false);
-        }
-        function nextVideo(){
-            if(autoplayEnabled){
-                window.location.href = nextVideoUrl;
-            }
-        }
-        function videoEnded(e) {
-            window.setTimeout(nextVideo, nextVideoDelay);
-        }
     }
+    else if (video)
+        video.addEventListener('ended', videoEnded, false);
+})();
+
+// Share button: copies the direct link
+function copyText(text) {
+    // The Clipboard API only exists on https and localhost, so when the
+    // server is reached over the LAN fall back to a hidden textarea
+    if (navigator.clipboard && window.isSecureContext)
+        return navigator.clipboard.writeText(text);
+    return new Promise(function(resolve, reject) {
+        var textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        var copied = false;
+        try {
+            copied = document.execCommand('copy');
+        } catch (e) {}
+        document.body.removeChild(textarea);
+        copied ? resolve() : reject();
+    });
 }
+var shareButton = document.querySelector('.share-button');
+if (shareButton) {
+    var shareLabel = shareButton.querySelector('.share-button-label');
+    var shareResetTimer = null;
+    shareButton.addEventListener('click', function() {
+        copyText(shareButton.dataset.shareUrl).then(function() {
+            shareLabel.textContent = 'Copied';
+        }, function() {
+            shareLabel.textContent = 'Copy failed';
+        });
+        clearTimeout(shareResetTimer);
+        shareResetTimer = setTimeout(function() {
+            shareLabel.textContent = 'Share';
+        }, 2000);
+    });
+}
+
+// Comments are fetched only when they're scrolled to or opened, so watching
+// a video without reading them doesn't ask YouTube for them
+(function() {
+    var area = document.querySelector('.comments-area[data-comments-url]');
+    if (!area)
+        return;
+    var details = area.closest('details');
+    var placeholder = area.querySelector('.comments-placeholder');
+    var state = 'waiting';
+    var observer = null;
+
+    function load() {
+        if (state !== 'waiting')
+            return;
+        state = 'loading';
+        if (observer)
+            observer.disconnect();
+        placeholder.textContent = 'Loading comments…';
+        fetch(area.dataset.commentsUrl).then(function(response) {
+            if (!response.ok)
+                throw new Error('Error ' + response.status);
+            return response.text();
+        }).then(function(html) {
+            state = 'loaded';
+            area.innerHTML = html;
+        }, function(error) {
+            state = 'waiting';
+            placeholder.textContent = 'Couldn\'t load the comments (' + error.message + '). ';
+            var retry = document.createElement('button');
+            retry.type = 'button';
+            retry.textContent = 'Try again';
+            retry.addEventListener('click', load);
+            placeholder.appendChild(retry);
+        });
+    }
+
+    // Without JavaScript this link opens the comments on their own page
+    var link = placeholder.querySelector('a');
+    if (link) {
+        link.addEventListener('click', function(e) {
+            if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0)
+                return;
+            e.preventDefault();
+            load();
+        });
+    }
+
+    if (details)
+        details.addEventListener('toggle', function() {
+            if (details.open)
+                load();
+        });
+    if (details && !details.open)
+        return;
+    if (!('IntersectionObserver' in window)) {
+        load();
+        return;
+    }
+    observer = new IntersectionObserver(function(entries) {
+        if (entries.some(function(entry) { return entry.isIntersecting; }))
+            load();
+    }, {rootMargin: '100px'});
+    observer.observe(area);
+})();

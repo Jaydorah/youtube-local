@@ -62,8 +62,8 @@
         <h2 class="playlist-title">{{ title }}</h2>
         <a class="playlist-author" href="{{ author_url }}">{{ author }}</a>
         <div class="playlist-stats">
-            <div>{{ video_count|commatize }} videos</div>
-            <div>{{ view_count|commatize }} views</div>
+            <div>{{ video_count|count }} videos</div>
+            <div>{{ view_count|count }} views</div>
             <div>Last updated {{ time_published }}</div>
         </div>
         <div class="playlist-description">{{ common_elements.text_runs(description) }}</div>

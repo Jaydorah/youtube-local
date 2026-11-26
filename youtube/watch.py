@@ -1,7 +1,7 @@
 import youtube
 from youtube import yt_app
 from youtube import util, comments, local_playlist, yt_data_extract
-from youtube import watch_progress, subscriptions
+from youtube import watch_progress, subscriptions, library, signed_in
 from youtube.chapters import parse_chapters
 import settings
 
@@ -19,6 +19,8 @@ import re
 import time
 import datetime
 import urllib3.exceptions
+import copy
+import cachetools
 from urllib.parse import parse_qs, urlencode
 from types import SimpleNamespace
 from math import ceil
@@ -423,14 +425,55 @@ def extract_info(video_id, use_invidious, playlist_id=None, index=None):
 
     yt_data_extract.update_with_new_urls(info, player_response)
 
-    # Age restricted video, retry
-    if info['age_restricted'] or info['player_urls_missing']:
+    # Age restricted video, retry. Not when YouTube wants to confirm this
+    # isn't a bot: it refuses every client then, so asking again is just
+    # another request.
+    bot_checked = bool(info['playability_error']
+                       and 'not a bot' in info['playability_error'])
+    if (info['age_restricted'] or info['player_urls_missing']) and not bot_checked:
         if info['age_restricted']:
             print('Age restricted video, retrying')
         else:
             print('Player urls missing, retrying')
-        player_response = fetch_player_response('tv_embedded', video_id)
+        # tv_embedded used to get around age restrictions, but YouTube
+        # turned it off ("no longer supported in this application")
+        player_response = fetch_player_response('android_vr', video_id)
         yt_data_extract.update_with_new_urls(info, player_response)
+
+    # Refused because of the bot check or age: ask again signed in, when
+    # Settings has a cookies file
+    sign_in_error = None
+    still_refused = not info['formats'] and info['playability_error']
+    if (still_refused and (bot_checked or info['age_restricted'])
+            and signed_in.is_set_up()):
+        print('Asking again signed in')
+        try:
+            signed_in.update_info(info, video_id)
+        except (signed_in.SignInError, util.FetchError) as e:
+            sign_in_error = str(e)
+            print('Signed-in request failed:', sign_in_error)
+
+    # YouTube flags the IP address, so every other video is refused too
+    # until it lifts
+    info['bot_check'] = bool(not info['formats'] and (
+        bot_checked or (info['playability_error']
+                        and 'not a bot' in info['playability_error'])))
+    if info['bot_check']:
+        info['playability_error'] = (
+            'YouTube is asking to confirm this isn\'t a bot, so it won\'t '
+            'give out this video right now. It usually stops after a while; '
+            'Route Tor in Settings, with Tor running, sometimes gets around '
+            'it.')
+        if sign_in_error:
+            info['playability_error'] += (' Asking again signed in didn\'t '
+                                          'work either: ' + sign_in_error)
+        elif not signed_in.is_set_up():
+            info['playability_error'] += (' Turning on "Sign in to YouTube" '
+                                          'in Settings lets it ask again '
+                                          'signed in.')
+    elif sign_in_error:
+        info['playability_error'] = ((info['playability_error'] or '')
+            + ' Asking again signed in didn\'t work: ' + sign_in_error)
 
     # signature decryption
     decryption_error = decrypt_signatures(info, video_id)
@@ -489,6 +532,30 @@ def extract_info(video_id, use_invidious, playlist_id=None, index=None):
         elif 300 <= response.status < 400:
             print('Error: exceeded max redirects while checking video URL')
     return info
+
+# What YouTube said about each video opened in the last few minutes, so
+# reloading the page, going back to it, or its Download menu doesn't ask
+# YouTube again. The stream urls in it stay valid for hours.
+INFO_CACHE_SECONDS = 10*60
+info_cache = cachetools.TTLCache(maxsize=32, ttl=INFO_CACHE_SECONDS)
+
+def get_info(video_id, use_invidious, playlist_id=None, index=None):
+    '''extract_info, from the cache when possible. Returns a copy the caller
+    can change.'''
+    key = (video_id, use_invidious, playlist_id, index)
+    info = info_cache.get(key)
+    if info is None:
+        info = extract_info(video_id, use_invidious,
+                            playlist_id=playlist_id, index=index)
+        # Errors aren't kept, so trying again asks again. Neither are
+        # livestreams and premieres, which change from minute to minute.
+        if (not info['error'] and not info['playability_error']
+                and info['formats'] and info['urls_ready']
+                and not info['live'] and not info['hls_formats']):
+            info_cache[key] = copy.deepcopy(info)
+        return info
+    return copy.deepcopy(info)
+
 
 def video_quality_string(format):
     if format['vcodec']:
@@ -602,6 +669,88 @@ def get_storyboard_vtt():
     return flask.Response(r, mimetype='text/vtt')
 
 
+def prepare_download_formats(info):
+    '''Points the format urls through this server if set to, and names the
+    files after the video. Returns the list for the Download section.'''
+    if settings.img_prefix:
+        # Don't prefix hls_formats for now because the urls inside the manifest
+        # would need to be prefixed as well.
+        for fmt in info['formats']:
+            fmt['url'] = util.prefix_url(fmt['url'])
+
+    # Add video title to end of url path so it has a filename other than just
+    # "videoplayback" when downloaded
+    title = urllib.parse.quote(util.to_valid_filename(info['title'] or ''))
+    for fmt in info['formats']:
+        filename = title
+        ext = fmt.get('ext')
+        if ext:
+            filename += '.' + ext
+        fmt['url'] = fmt['url'].replace(
+            '/videoplayback',
+            '/videoplayback/name/' + filename)
+
+    download_formats = []
+    for format in (info['formats'] + info['hls_formats']):
+        if format['acodec'] and format['vcodec']:
+            codecs_string = format['acodec'] + ', ' + format['vcodec']
+        else:
+            codecs_string = format['acodec'] or format['vcodec'] or '?'
+        download_formats.append({
+            'url': format['url'],
+            'ext': format['ext'] or '?',
+            'audio_quality': audio_quality_string(format),
+            'video_quality': video_quality_string(format),
+            'file_size': format_bytes(format['file_size']),
+            'codecs': codecs_string,
+            'has_audio': bool(format['acodec']),
+            'has_video': bool(format['vcodec']),
+            'height': format.get('height') or format.get('quality'),
+        })
+    return download_formats
+
+
+def transcript_downloads(subtitle_sources):
+    downloads = []
+    for source in subtitle_sources:
+        best_caption_parse = urllib.parse.urlparse(
+            source['url'].lstrip('/'))
+        transcript_url = (util.URL_ORIGIN
+            + '/watch/transcript'
+            + best_caption_parse.path
+            + '?' + best_caption_parse.query)
+        downloads.append({
+            'label': 'Video Transcript: ' + source['label'],
+            'ext': 'txt',
+            'url': transcript_url
+        })
+    return downloads
+
+
+@yt_app.route('/ytl-api/download_formats')
+def get_download_formats():
+    '''For Download in the menu on each video'''
+    video_id = request.args.get('v', '')
+    if not re.fullmatch(r'[\w-]{11}', video_id):
+        return flask.jsonify({'ok': False, 'error': 'Invalid video id'}), 400
+    try:
+        info = get_info(video_id, use_invidious=True)
+    except util.FetchError as e:
+        return flask.jsonify({'ok': False, 'error': str(e)}), 502
+    if info['error']:
+        return flask.jsonify({'ok': False, 'error': info['error']}), 502
+    formats = prepare_download_formats(info)
+    if not formats and info['playability_error']:
+        return flask.jsonify({'ok': False,
+                              'error': info['playability_error']}), 502
+    return flask.jsonify({
+        'ok': True,
+        'title': info['title'],
+        'formats': formats,
+        'others': transcript_downloads(get_subtitle_sources(info)),
+    })
+
+
 time_table = {'h': 3600, 'm': 60, 's': 1}
 @yt_app.route('/watch')
 @yt_app.route('/embed')
@@ -630,25 +779,12 @@ def get_watch_page(video_id=None):
     playlist_id = request.args.get('list')
     index = request.args.get('index')
     use_invidious = bool(int(request.args.get('use_invidious', '1')))
+    is_embed = request.path.startswith('/embed') and settings.embed_page_mode
     dislikes_task = None
-    if request.path.startswith('/embed') and settings.embed_page_mode:
-        tasks = (
-            gevent.spawn((lambda: {})),
-            gevent.spawn(extract_info, video_id, use_invidious,
-                         playlist_id=playlist_id, index=index),
-        )
-    else:
-        tasks = (
-            gevent.spawn(comments.video_comments, video_id,
-                         int(settings.default_comment_sorting), lc=lc),
-            gevent.spawn(extract_info, video_id, use_invidious,
-                         playlist_id=playlist_id, index=index),
-        )
-        if settings.use_return_youtube_dislike:
-            dislikes_task = gevent.spawn(fetch_dislike_count, video_id)
-    gevent.joinall(tasks)
-    util.check_gevent_exceptions(tasks[1])
-    comments_info, info = tasks[0].value, tasks[1].value
+    if settings.use_return_youtube_dislike and not is_embed:
+        dislikes_task = gevent.spawn(fetch_dislike_count, video_id)
+    info = get_info(video_id, use_invidious,
+                    playlist_id=playlist_id, index=index)
 
     if info['error']:
         return flask.render_template('error.html', error_message = info['error'])
@@ -661,12 +797,22 @@ def get_watch_page(video_id=None):
         dislikes_task.kill(block=False)
 
     video_info = {
-        'duration':  util.seconds_to_timestamp(info['duration'] or 0),
-        'id':        info['id'],
+        'duration':  (util.seconds_to_timestamp(info['duration'])
+                      if info['duration'] else None),
+        # info['id'] is None when YouTube wouldn't give the video's info
+        'id':        info['id'] or video_id,
         'title':     info['title'],
         'author':    info['author'],
         'author_id': info['author_id'],
     }
+
+    is_watch_page = not (request.path.startswith('/embed')
+                         and settings.embed_page_mode)
+    # It's playing now, so it doesn't need to wait in the queue anymore.
+    # Unless YouTube refused it for the bot check: then it stays for later.
+    if is_watch_page and not info['bot_check']:
+        library.queue_remove(video_id)
+    queue = library.get_queue() if is_watch_page else []
 
     # prefix urls, and other post-processing not handled by yt_data_extract
     for item in info['related_videos']:
@@ -685,40 +831,11 @@ def get_watch_page(video_id=None):
                 item['url'] += '&index=' + str(item['index'])
         info['playlist']['author_url'] = util.prefix_url(
             info['playlist']['author_url'])
-    if settings.img_prefix:
-        # Don't prefix hls_formats for now because the urls inside the manifest
-        # would need to be prefixed as well.
-        for fmt in info['formats']:
-            fmt['url'] = util.prefix_url(fmt['url'])
-
-    # Add video title to end of url path so it has a filename other than just
-    # "videoplayback" when downloaded
-    title = urllib.parse.quote(util.to_valid_filename(info['title'] or ''))
-    for fmt in info['formats']:
-        filename = title
-        ext = fmt.get('ext')
-        if ext:
-            filename += '.' + ext
-        fmt['url'] = fmt['url'].replace(
-            '/videoplayback',
-            '/videoplayback/name/' + filename)
-
-
-    download_formats = []
-
-    for format in (info['formats'] + info['hls_formats']):
-        if format['acodec'] and format['vcodec']:
-            codecs_string = format['acodec'] + ', ' + format['vcodec']
-        else:
-            codecs_string = format['acodec'] or format['vcodec'] or '?'
-        download_formats.append({
-            'url': format['url'],
-            'ext': format['ext'] or '?',
-            'audio_quality': audio_quality_string(format),
-            'video_quality': video_quality_string(format),
-            'file_size': format_bytes(format['file_size']),
-            'codecs': codecs_string,
-        })
+    local_list = request.args.get('local_list')
+    if local_list:
+        info['playlist'] = local_playlist.watch_page_playlist(
+            local_list, video_id, index, request.args.get('shuffle'))
+    download_formats = prepare_download_formats(info)
 
     if (settings.route_tor == 2) or info['tor_bypass_used']:
         target_resolution = 240
@@ -770,30 +887,20 @@ def get_watch_page(video_id=None):
     # 1 second per pixel, or the actual video width
     theater_video_target_width = max(640, info['duration'] or 0, video_width)
 
-    # Check for false determination of disabled comments, which comes from
-    # the watch page. But if we got comments in the separate request for those,
-    # then the determination is wrong.
-    if info['comments_disabled'] and comments_info.get('comments'):
-        info['comments_disabled'] = False
-        print('Warning: False determination that comments are disabled')
-        print('Comment count:', info['comment_count'])
-        info['comment_count'] = None # hack to make it obvious there's a bug
+    # Comments are only fetched once the user scrolls down to them or opens
+    # them (comments.js), so pages where nobody reads them don't ask YouTube.
+    # Without JavaScript the link opens them on their own page.
+    comment_sort = int(settings.default_comment_sorting)
+    comments_url = (util.URL_ORIGIN + '/ytl-api/video_comments?'
+                    + urlencode({'v': video_id, 'lc': lc}))
+    comments_page_url = (util.URL_ORIGIN + '/comments?ctoken='
+                         + comments.make_comment_ctoken(video_id,
+                                                        sort=comment_sort,
+                                                        lc=lc))
 
     # captions and transcript
     subtitle_sources = get_subtitle_sources(info)
-    other_downloads = []
-    for source in subtitle_sources:
-        best_caption_parse = urllib.parse.urlparse(
-            source['url'].lstrip('/'))
-        transcript_url = (util.URL_ORIGIN
-            + '/watch/transcript'
-            + best_caption_parse.path
-            + '?' + best_caption_parse.query)
-        other_downloads.append({
-            'label': 'Video Transcript: ' + source['label'],
-            'ext': 'txt',
-            'url': transcript_url
-        })
+    other_downloads = transcript_downloads(subtitle_sources)
 
     published_timestamp, published_precision = parse_publish_time(
         info['time_published'])
@@ -808,13 +915,14 @@ def get_watch_page(video_id=None):
         template_name = 'watch.html'
     return flask.render_template(template_name,
         header_playlist_names   = local_playlist.get_playlist_names(),
+        queue_videos            = library.display_items(queue),
         uploader_channel_url    = ('/' + info['author_url']) if info['author_url'] else '',
         time_published             = info['time_published'],
         published_timestamp        = published_timestamp,
         published_precision        = published_precision,
-        view_count    = (lambda x: '{:,}'.format(x) if x is not None else "")(info.get("view_count", None)),
-        like_count    = (lambda x: '{:,}'.format(x) if x is not None else "")(info.get("like_count", None)),
-        dislike_count = (lambda x: '{:,}'.format(x) if x is not None else "")(info.get("dislike_count", None)),
+        view_count    = info.get('view_count'),
+        like_count    = info.get('like_count'),
+        dislike_count = info.get('dislike_count'),
         download_formats        = download_formats,
         other_downloads         = other_downloads,
         video_info              = json.dumps(video_info),
@@ -824,9 +932,12 @@ def get_watch_page(video_id=None):
         playlist                = info['playlist'],
         music_list              = info['music_list'],
         music_attributes        = get_ordered_music_list_attributes(info['music_list']),
-        comments_info           = comments_info,
-        comment_count           = info['comment_count'],
-        comments_disabled       = info['comments_disabled'],
+        comments_url            = comments_url,
+        comments_page_url       = comments_page_url,
+        # The count is "0" when the page had no comment section, which no
+        # longer means there are none
+        comment_count           = (None if info['comments_disabled']
+                                   else info['comment_count']),
 
         video_height            = video_height,
         video_width             = video_width,
@@ -864,6 +975,9 @@ def get_watch_page(video_id=None):
             'playlist': info['playlist'],
             'related': info['related_videos'],
             'playability_error': info['playability_error'],
+            'bot_check': info['bot_check'],
+            'queue_length': len(queue),
+            'video_info': video_info,
         },
         font_family = youtube.font_choices[settings.font], # for embed page
         **source_info,

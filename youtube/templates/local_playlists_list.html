@@ -1,36 +1,79 @@
-{% set page_title = 'Local playlists' %}
+{% set page_title = 'Playlists' %}
 {% extends "base.html" %}
-
-{% block style %}
-main{
-    display: flex;
-    justify-content: center;
-}
-    ul{
-        background-color: var(--interface-color);
-        margin-top: 20px;
-        padding: 20px;
-        width: 400px;
-        max-width: 100%;
-        align-self: start;
-    }
-        li{
-            margin-bottom: 10px;
-        }
-{% endblock style %}
+{% import "library_elements.html" as lib with context %}
 
 {% block main %}
-    <ul>
-        {% for playlist_name, playlist_url in playlists %}
-            <li><a href="{{ playlist_url }}">{{ playlist_name }}</a></li>
-        {% else %}
-            <li class="no-playlists">No local playlists yet. Tick videos and use "Add to playlist" at the top of the page to make one.</li>
+<div class="library-page">
+    <div class="library-head">
+        <h1 class="library-title">Playlists</h1>
+        <div class="library-actions">
+            <details class="popout" id="new-playlist">
+                <summary class="lib-button lib-button-primary">{{ lib.icon('plus') }}<span>New playlist</span></summary>
+                <form class="popout-panel popout-form" method="post" action="/youtube.com/playlists_create">
+                    <label for="new-playlist-name">Name</label>
+                    <input id="new-playlist-name" name="playlist_name" maxlength="100" required autocomplete="off">
+                    <div class="popout-buttons">
+                        <button type="submit" class="lib-button lib-button-primary">Create</button>
+                    </div>
+                </form>
+            </details>
+            <details class="popout" id="import-playlists">
+                <summary class="lib-button">{{ lib.icon('import') }}<span>Import</span></summary>
+                <form class="popout-panel popout-form popout-wide" method="post" action="/youtube.com/playlists_import" enctype="multipart/form-data">
+                    <h2 class="popout-title">Import playlists</h2>
+                    <label for="import-files">Files</label>
+                    <input id="import-files" type="file" name="files" multiple accept=".json,.csv,.txt,.m3u,.m3u8">
+                    <p class="popout-help">JSON, CSV, M3U, or a text file with one link per line. The playlist files in a Google Takeout of your YouTube data work too.</p>
+                    <label for="import-links">Or paste links</label>
+                    <textarea id="import-links" name="links" rows="4" placeholder="https://youtu.be/…&#10;https://www.youtube.com/watch?v=…"></textarea>
+                    <label for="import-name">Playlist name <span class="optional">(optional)</span></label>
+                    <input id="import-name" name="playlist_name" maxlength="100" autocomplete="off" placeholder="Taken from the file">
+                    <p class="popout-help">Videos are added to the playlist with that name if you already have one. Titles missing from the file are looked up afterwards.</p>
+                    <div class="popout-buttons">
+                        <button type="submit" class="lib-button lib-button-primary">Import</button>
+                    </div>
+                </form>
+            </details>
+            <details class="popout popout-end">
+                <summary class="lib-button">{{ lib.icon('export') }}<span>Export all</span></summary>
+                <div class="popout-panel popout-menu">
+                    <a class="popout-menu-item" href="/youtube.com/playlists_export?format=json" download>
+                        {{ lib.icon('export') }}<span>JSON<small>Every playlist in one file, which can be imported back</small></span>
+                    </a>
+                    <a class="popout-menu-item" href="/youtube.com/playlists_export?format=csv" download>
+                        {{ lib.icon('export') }}<span>CSV spreadsheet<small>One row per video, with a Playlist column</small></span>
+                    </a>
+                </div>
+            </details>
+        </div>
+    </div>
+
+    {{ lib.page_message(message) }}
+
+    {% if playlist_mode %}
+        <div class="playlist-mode-banner" role="status">
+            <span class="playlist-mode-dot" aria-hidden="true"></span>
+            <span>Playlist mode is on. On a video's page, clicking another video adds it to <a href="{{ '/youtube.com/playlists/' + playlist_mode|urlencode }}">{{ playlist_mode }}</a>.</span>
+            <button type="button" class="lib-button lib-button-small" data-playlist-mode-off>Turn off</button>
+        </div>
+    {% endif %}
+
+    <div class="library-grid">
+        {{ lib.playlist_card(queue, kind='queue') }}
+        {% for summary in playlists %}
+            {{ lib.playlist_card(summary) }}
         {% endfor %}
-    </ul>
+    </div>
+
+    {% if playlists|length <= 1 and not playlists[0]['video_count'] %}
+        <div class="library-hint">
+            <h2>Saving videos</h2>
+            <ul>
+                <li>Open the {{ lib.icon('more') }} menu on any video, or right-click it, and choose <b>Save to playlist</b> or <b>Save to Watch later</b>.</li>
+                <li>On a video's page, turn on <b>Playlist mode</b> under Autoplay. While it's on, clicking a video on that page adds it to the playlist instead of opening it.</li>
+                <li><b>Import</b> brings in playlists from a file, such as a Google Takeout of your YouTube data.</li>
+            </ul>
+        </div>
+    {% endif %}
+</div>
 {% endblock main %}
-
-
-
-
-
-

@@ -1,0 +1,1905 @@
+/* The menu on each video, the Save and Download dialogs, the Playlists
+   button and its list, the playlist pages, and the queue and Playlist mode
+   on the watch page. Loaded on every page after the style's own sheets, so
+   it uses their variables (modern_ui.css, youtube_ui.css), with fallbacks
+   for the Classic style, whose themes only set a few. */
+
+/* Set on body: the Classic themes set their colors there */
+body{
+    --lib-surface: var(--interface-color, #ffffff);
+    --lib-popup: var(--popup-background, var(--interface-color, #ffffff));
+    --lib-surface-2: var(--surface-2, rgba(128, 128, 128, 0.16));
+    --lib-surface-3: var(--surface-3, rgba(128, 128, 128, 0.28));
+    --lib-border: var(--border-color, rgba(128, 128, 128, 0.4));
+    --lib-text: var(--text-color, #222222);
+    --lib-text-2: var(--text-secondary, var(--text-color, #555555));
+    --lib-accent: var(--accent, rgb(var(--link-color-rgb, 6, 95, 212)));
+    --lib-primary: var(--primary-background, var(--lib-accent));
+    --lib-on-primary: var(--primary-text, #ffffff);
+    --lib-brand: var(--brand, #cc0000);
+    --lib-radius: var(--radius, 8px);
+    --lib-radius-small: var(--radius-small, 6px);
+    --lib-control-radius: var(--control-radius, 6px);
+    --lib-shadow: var(--popup-shadow, 0 8px 28px rgba(0, 0, 0, 0.28));
+    --lib-danger: #c62828;
+}
+html[data-color-scheme="dark"] body{
+    --lib-danger: #ff8a80;
+}
+@media (prefers-color-scheme: dark){
+    html[data-color-scheme="system"] body{
+        --lib-danger: #ff8a80;
+    }
+}
+
+.icon{
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vertical-align: middle;
+}
+
+/* Only work with JavaScript */
+html:not(.js) .item-menu-button,
+html:not(.js) .watch-actions,
+html:not(.js) .playlist-mode,
+html:not(.js) .playlist-row-handle,
+html:not(.js) [data-queue-all]{
+    display: none !important;
+}
+
+.ytl-gone{
+    display: none !important;
+}
+/* These set their own display, which would otherwise win over hidden */
+.ytl-dialog [hidden], .playlist-mode [hidden], .library-popover [hidden]{
+    display: none !important;
+}
+.is-leaving{
+    opacity: 0;
+    transform: scale(0.98);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+
+/* ---------- Buttons ---------- */
+
+body .lib-button{
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 36px;
+    margin: 0px;
+    padding: 0px 14px;
+    border: 1px solid transparent;
+    border-radius: var(--lib-control-radius);
+    background-color: var(--lib-surface-2);
+    color: var(--lib-text);
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.2;
+    white-space: nowrap;
+    text-decoration: none;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+    transition: background-color 0.15s, filter 0.15s;
+}
+body .lib-button:hover{
+    background-color: var(--lib-surface-3);
+    text-decoration: none;
+}
+body .lib-button:disabled{
+    opacity: 0.6;
+    cursor: default;
+}
+body .lib-button .icon{
+    width: 20px;
+    height: 20px;
+}
+body .lib-button-primary,
+body .lib-button-primary:hover{
+    background-color: var(--lib-primary);
+    color: var(--lib-on-primary);
+}
+body .lib-button-primary:hover{
+    filter: brightness(1.12);
+}
+/* On the dark playlist header */
+body .lib-button-light,
+body .lib-button-light:hover{
+    background-color: #ffffff;
+    color: #0f0f0f;
+}
+body .lib-button-light:hover{
+    background-color: #e6e6e6;
+}
+body .lib-button-glass{
+    background-color: rgba(255, 255, 255, 0.16);
+    color: #ffffff;
+}
+body .lib-button-glass:hover{
+    background-color: rgba(255, 255, 255, 0.26);
+}
+body .lib-button-danger,
+body .lib-button-danger:hover{
+    background-color: #c62828;
+    color: #ffffff;
+}
+body .lib-button-small{
+    min-height: 30px;
+    padding: 0px 10px;
+    font-size: 0.8rem;
+}
+body .lib-button-small .icon{
+    width: 18px;
+    height: 18px;
+}
+body .lib-button-icon{
+    width: 36px;
+    padding: 0px;
+}
+summary.lib-button::-webkit-details-marker{
+    display: none;
+}
+details[open] > summary.lib-button{
+    margin-bottom: 0px;
+}
+
+body .ytl-icon-button{
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    min-height: 0px;
+    padding: 0px;
+    border: none;
+    border-radius: 50%;
+    background-color: transparent;
+    color: var(--lib-text);
+    cursor: pointer;
+}
+body .ytl-icon-button:hover{
+    background-color: var(--lib-surface-2);
+}
+
+
+/* ---------- The ⋮ button on each video ---------- */
+
+.item-box[data-video-id] .item-metadata{
+    position: relative;
+}
+html.js .item-box[data-video-id] .item-metadata{
+    padding-right: 34px;
+}
+.item .item-menu-button{
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    min-height: 0px;
+    margin: 0px;
+    padding: 0px;
+    border: none;
+    border-radius: 50%;
+    background-color: transparent;
+    color: var(--lib-text);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.12s, background-color 0.12s;
+}
+.item .item-menu-button .icon{
+    width: 22px;
+    height: 22px;
+}
+.item-box:hover .item-menu-button,
+.item-box:focus-within .item-menu-button,
+.item-box.menu-open .item-menu-button{
+    opacity: 1;
+}
+.item .item-menu-button:hover{
+    background-color: var(--lib-surface-2);
+}
+.item-box.menu-open .item-menu-button,
+.item .item-menu-button:active{
+    background-color: var(--lib-surface-3);
+}
+/* No hover on touch screens, so it's always there */
+@media (hover: none){
+    .item .item-menu-button{
+        opacity: 1;
+    }
+}
+html[data-ui-style="classic"] .item .item-menu-button{
+    top: 0px;
+    right: 0px;
+}
+html[data-ui-style="youtube"] .item-grid .item-menu-button{
+    top: 6px;
+    right: 0px;
+}
+html[data-ui-style="youtube"] .item-list .item-menu-button,
+.side-videos .item .item-menu-button,
+.playlist-rows .item .item-menu-button{
+    top: 0px;
+    right: 0px;
+}
+
+
+/* ---------- The menu ---------- */
+
+.ytl-menu{
+    position: absolute;
+    z-index: 1000;
+    min-width: 230px;
+    max-width: calc(100vw - 16px);
+    padding: 8px 0px;
+    border: 1px solid var(--lib-border);
+    border-radius: var(--lib-radius);
+    background-color: var(--lib-popup);
+    color: var(--lib-text);
+    box-shadow: var(--lib-shadow);
+    outline: none;
+}
+html[data-ui-style="youtube"] .ytl-menu{
+    border-color: transparent;
+}
+body .ytl-menu .ytl-menu-item,
+body .popout-menu .popout-menu-item{
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 16px;
+    width: 100%;
+    min-height: 36px;
+    margin: 0px;
+    padding: 0px 16px;
+    border: none;
+    border-radius: 0px;
+    background-color: transparent;
+    color: var(--lib-text);
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 400;
+    line-height: 1.3;
+    text-align: left;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+}
+body .ytl-menu .ytl-menu-item:hover,
+body .ytl-menu .ytl-menu-item:focus,
+body .popout-menu .popout-menu-item:hover{
+    background-color: var(--lib-surface-2);
+    outline: none;
+    text-decoration: none;
+}
+body .ytl-menu .ytl-menu-item:focus-visible{
+    box-shadow: inset 0px 0px 0px 2px var(--lib-accent);
+}
+.ytl-menu-separator, .popout-menu-separator{
+    height: 1px;
+    margin: 8px 0px;
+    background-color: var(--lib-border);
+}
+
+
+/* ---------- Toast ---------- */
+
+.ytl-toast{
+    position: fixed;
+    inset: auto auto 24px 24px;
+    z-index: 1100;
+    margin: 0px;
+    border: none;
+    overflow: visible;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    max-width: min(480px, calc(100vw - 48px));
+    min-height: 48px;
+    padding: 6px 8px 6px 16px;
+    border-radius: 8px;
+    background-color: #1f1f1f;
+    color: #ffffff;
+    font-size: 0.875rem;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+    opacity: 0;
+    transform: translateY(12px);
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+html[data-color-scheme="dark"] .ytl-toast{
+    background-color: #f1f1f1;
+    color: #0f0f0f;
+}
+@media (prefers-color-scheme: dark){
+    html[data-color-scheme="system"] .ytl-toast{
+        background-color: #f1f1f1;
+        color: #0f0f0f;
+    }
+}
+.ytl-toast.is-visible{
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+}
+.ytl-toast-text{
+    padding: 8px 0px;
+}
+body .ytl-toast .ytl-toast-action{
+    flex-shrink: 0;
+    min-height: 36px;
+    margin-left: auto;
+    padding: 0px 12px;
+    border: none;
+    border-radius: 18px;
+    background-color: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+}
+body .ytl-toast .ytl-toast-action:hover{
+    background-color: rgba(128, 128, 128, 0.25);
+}
+@media (max-width: 600px){
+    .ytl-toast{
+        inset: auto 12px 12px 12px;
+        max-width: none;
+    }
+}
+
+
+/* ---------- Dialogs: Save to…, Download ---------- */
+
+dialog.ytl-dialog{
+    width: min(400px, calc(100vw - 32px));
+    max-height: min(600px, calc(100vh - 48px));
+    padding: 0px;
+    border: 1px solid var(--lib-border);
+    border-radius: 12px;
+    background-color: var(--lib-popup);
+    color: var(--lib-text);
+    box-shadow: var(--lib-shadow);
+    overflow: hidden;
+}
+dialog.ytl-dialog.is-wide{
+    width: min(560px, calc(100vw - 32px));
+}
+dialog.ytl-dialog::backdrop{
+    background-color: rgba(0, 0, 0, 0.5);
+}
+.ytl-dialog-inner{
+    display: flex;
+    flex-direction: column;
+    max-height: min(600px, calc(100vh - 48px));
+}
+.ytl-dialog-head{
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 16px 12px 8px 20px;
+}
+    .ytl-dialog-heading{
+        flex: 1;
+        min-width: 0;
+        padding-top: 6px;
+    }
+    .ytl-dialog-title{
+        margin: 0px;
+        font-size: 1.1rem;
+        font-weight: 600;
+    }
+    .ytl-dialog-subtitle{
+        margin: 2px 0px 0px 0px;
+        color: var(--lib-text-2);
+        font-size: 0.85rem;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+.ytl-dialog-body{
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 4px 0px 12px 0px;
+}
+.ytl-dialog-loading{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0px;
+    padding: 16px 20px;
+    color: var(--lib-text-2);
+    font-size: 0.9rem;
+}
+.ytl-dialog-error{
+    margin: 0px;
+    padding: 8px 20px;
+    color: var(--lib-text);
+    font-size: 0.875rem;
+}
+.ytl-dialog-error:empty{
+    display: none;
+}
+.ytl-dialog-error-box{
+    padding: 8px 20px 4px 20px;
+}
+    .ytl-dialog-error-box .ytl-dialog-error{
+        padding: 0px 0px 12px 0px;
+    }
+.ytl-spinner{
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    border: 2px solid var(--lib-surface-3);
+    border-top-color: var(--lib-accent);
+    border-radius: 50%;
+    animation: ytl-spin 0.8s linear infinite;
+}
+@keyframes ytl-spin{
+    to{ transform: rotate(360deg); }
+}
+
+/* Save to…: a row per playlist */
+.save-list{
+    display: flex;
+    flex-direction: column;
+}
+.save-row{
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-height: 44px;
+    padding: 0px 20px;
+    cursor: pointer;
+}
+.save-row:hover{
+    background-color: var(--lib-surface-2);
+}
+    /* the box beside it is drawn instead, the checkbox is still what's
+       focused and read out */
+    .save-row .save-checkbox{
+        position: absolute;
+        opacity: 0;
+        width: 1px;
+        height: 1px;
+        margin: 0px;
+    }
+    .save-row-check{
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 22px;
+        height: 22px;
+        flex-shrink: 0;
+        border: 2px solid var(--lib-text-2);
+        border-radius: 4px;
+        color: transparent;
+    }
+        .save-row-check .icon{
+            width: 18px;
+            height: 18px;
+            stroke-width: 2.5;
+        }
+    .save-checkbox:checked + .save-row-check{
+        border-color: var(--lib-accent);
+        background-color: var(--lib-accent);
+        color: #ffffff;
+    }
+    .save-checkbox:focus-visible + .save-row-check{
+        outline: 2px solid var(--lib-accent);
+        outline-offset: 2px;
+    }
+    .save-checkbox:disabled + .save-row-check{
+        opacity: 0.5;
+    }
+    .save-row > .icon{
+        width: 20px;
+        height: 20px;
+        color: var(--lib-text-2);
+    }
+    .save-row-name{
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        font-size: 0.9rem;
+    }
+    .save-row-count{
+        color: var(--lib-text-2);
+        font-size: 0.8rem;
+        font-variant-numeric: tabular-nums;
+    }
+.save-new{
+    margin-top: 6px;
+    padding: 8px 12px 0px 12px;
+    border-top: 1px solid var(--lib-border);
+}
+body .save-new .save-new-button{
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 14px;
+    width: 100%;
+    min-height: 44px;
+    padding: 0px 8px;
+    border: none;
+    border-radius: var(--lib-radius-small);
+    background-color: transparent;
+    color: var(--lib-text);
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+}
+body .save-new .save-new-button:hover{
+    background-color: var(--lib-surface-2);
+}
+.save-new-form{
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 8px;
+}
+    .save-new-input{
+        width: 100%;
+    }
+    .save-new-buttons{
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+    }
+    .save-new-form .ytl-dialog-error{
+        padding: 0px;
+    }
+
+/* Download */
+.download-group{
+    padding: 4px 12px 8px 12px;
+}
+    .download-group h3{
+        margin: 8px 8px 4px 8px;
+        color: var(--lib-text-2);
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+body .download-row{
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 42px;
+    padding: 0px 8px;
+    border-radius: var(--lib-radius-small);
+    color: var(--lib-text);
+    text-decoration: none;
+}
+body .download-row:hover{
+    background-color: var(--lib-surface-2);
+    text-decoration: none;
+}
+    .download-row > .icon{
+        width: 20px;
+        height: 20px;
+        color: var(--lib-text-2);
+    }
+    .download-row-main{
+        min-width: 4.5em;
+        font-weight: 600;
+        font-size: 0.9rem;
+        font-variant-numeric: tabular-nums;
+    }
+    .download-row-details{
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        color: var(--lib-text-2);
+        font-size: 0.82rem;
+    }
+
+
+/* ---------- The Playlists button in the header and its list ---------- */
+
+#site-search .header-end{
+    grid-area: end;
+    justify-self: end;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+#site-search #library-button{
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 40px;
+    padding: 0px 14px 0px 10px;
+    border-radius: 20px;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+    color: var(--text-color);
+}
+#site-search #library-button:hover,
+#site-search #library-button[aria-expanded="true"]{
+    background-color: var(--surface-2);
+}
+    .library-button-icon{
+        position: relative;
+        display: inline-flex;
+    }
+    /* Playlist mode is on */
+    .library-button-dot{
+        display: none;
+        position: absolute;
+        top: -3px;
+        right: -3px;
+        width: 10px;
+        height: 10px;
+        border: 2px solid var(--header-background, #ffffff);
+        border-radius: 50%;
+        background-color: var(--lib-brand);
+    }
+    #library-button.playlist-mode-on .library-button-dot{
+        display: block;
+    }
+
+.library-popover{
+    position: fixed;
+    z-index: 900;
+    display: flex;
+    flex-direction: column;
+    width: 360px;
+    max-width: calc(100vw - 16px);
+    max-height: calc(100vh - var(--header-height, 50px) - 24px);
+    border: 1px solid var(--lib-border);
+    border-radius: 12px;
+    background-color: var(--lib-popup);
+    color: var(--lib-text);
+    box-shadow: var(--lib-shadow);
+}
+html[data-ui-style="youtube"] .library-popover{
+    border-color: transparent;
+}
+.library-popover-head{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px 8px 16px;
+}
+    .library-popover-head h2{
+        margin: 0px;
+        font-size: 1rem;
+        font-weight: 600;
+    }
+    body .library-popover-all{
+        font-size: 0.85rem;
+        font-weight: 500;
+    }
+.library-popover-body{
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+    .library-popover-body .playlist-mode-banner{
+        margin: 0px 12px 8px 12px;
+    }
+.library-popover-list{
+    list-style: none;
+    margin: 0px;
+    padding: 0px 8px 8px 8px;
+}
+.library-row{
+    position: relative;
+    display: flex;
+    align-items: center;
+    border-radius: var(--lib-radius-small);
+}
+.library-row:hover{
+    background-color: var(--lib-surface-2);
+}
+.library-row.is-queue{
+    margin-bottom: 4px;
+}
+.library-row.is-queue::after{
+    content: "";
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    bottom: -3px;
+    height: 1px;
+    background-color: var(--lib-border);
+}
+body .library-row-link{
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 0;
+    padding: 6px 8px;
+    color: var(--lib-text);
+    text-decoration: none;
+}
+body .library-row-link:hover{
+    text-decoration: none;
+}
+    .library-row-thumb{
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 72px;
+        height: 40px;
+        flex-shrink: 0;
+        overflow: hidden;
+        border-radius: 6px;
+        background-color: var(--lib-surface-3);
+        color: var(--lib-text-2);
+    }
+        .library-row-thumb img{
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .library-row-thumb .icon{
+            width: 20px;
+            height: 20px;
+        }
+    .library-row-text{
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+    }
+        .library-row-name{
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        .library-row-meta{
+            color: var(--lib-text-2);
+            font-size: 0.78rem;
+        }
+body .library-row .library-row-play{
+    margin-right: 6px;
+    opacity: 0;
+}
+.library-row:hover .library-row-play,
+.library-row .library-row-play:focus-visible{
+    opacity: 1;
+}
+@media (hover: none){
+    body .library-row .library-row-play{
+        opacity: 1;
+    }
+}
+.library-popover-foot{
+    display: flex;
+    gap: 8px;
+    padding: 10px 16px 14px 16px;
+    border-top: 1px solid var(--lib-border);
+}
+
+
+/* ---------- The bell in the header and its list (notifications.js) ---------- */
+
+html:not(.js) #notifications-button{
+    display: none;
+}
+#site-search #notifications-button{
+    position: relative;
+}
+/* The number of unread ones, red like YouTube's */
+.notifications-badge{
+    position: absolute;
+    top: 3px;
+    left: 20px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0px 4px;
+    box-sizing: border-box;
+    border: 2px solid var(--header-background, #ffffff);
+    border-radius: 9px;
+    background-color: #cc0000;
+    color: #ffffff;
+    font-size: 0.65rem;
+    font-weight: 700;
+    line-height: 14px;
+    text-align: center;
+    pointer-events: none;
+}
+.notifications-badge[hidden]{
+    display: none;
+}
+
+.notifications-popover{
+    width: 400px;
+}
+body .library-popover .notifications-clear{
+    padding: 4px 8px;
+    margin-right: -8px;
+    border: none;
+    border-radius: var(--lib-control-radius);
+    background: none;
+    color: var(--lib-accent);
+    font: inherit;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+}
+body .library-popover .notifications-clear:hover{
+    background-color: var(--lib-surface-2);
+}
+.notifications-list{
+    list-style: none;
+    margin: 0px;
+    padding: 0px 8px 8px 8px;
+}
+.notification-row{
+    position: relative;
+    border-radius: var(--lib-radius-small);
+}
+.notification-row:has(a):hover{
+    background-color: var(--lib-surface-2);
+}
+    .notification-unread-dot{
+        display: none;
+        position: absolute;
+        top: 24px;
+        left: 3px;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background-color: var(--lib-accent);
+    }
+    .notification-row.is-unread .notification-unread-dot{
+        display: block;
+    }
+body .notification-link{
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 9px 8px 9px 14px;
+    color: var(--lib-text);
+    text-decoration: none;
+}
+body a.notification-link:hover{
+    text-decoration: none;
+}
+    .notification-icon{
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        flex-shrink: 0;
+        border-radius: 50%;
+        background-color: var(--lib-surface-2);
+        color: var(--lib-text-2);
+    }
+        .notification-icon .icon{
+            width: 20px;
+            height: 20px;
+        }
+        .notification-row.is-error .notification-icon{
+            color: var(--lib-danger);
+        }
+    .notification-text{
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        flex: 1;
+        min-width: 0;
+    }
+        .notification-message{
+            font-size: 0.9rem;
+            line-height: 1.35;
+        }
+        .notification-title{
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            color: var(--lib-text-2);
+            font-size: 0.82rem;
+            line-height: 1.35;
+        }
+        .notification-time{
+            color: var(--lib-text-2);
+            font-size: 0.75rem;
+        }
+    .notification-thumb{
+        width: 86px;
+        height: 48px;
+        flex-shrink: 0;
+        overflow: hidden;
+        border-radius: 6px;
+        background-color: var(--lib-surface-3);
+    }
+        .notification-thumb img{
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+.notifications-empty{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 32px 32px 32px;
+    text-align: center;
+    color: var(--lib-text-2);
+}
+    .notifications-empty .icon{
+        width: 40px;
+        height: 40px;
+        margin-bottom: 10px;
+    }
+    .notifications-empty p{
+        margin: 0px;
+        color: var(--lib-text);
+        font-weight: 500;
+    }
+    .notifications-empty p.notifications-empty-help{
+        margin-top: 4px;
+        color: var(--lib-text-2);
+        font-size: 0.85rem;
+        font-weight: 400;
+    }
+
+
+/* ---------- Dropdowns on the playlist pages (details.popout) ---------- */
+
+details.popout{
+    position: relative;
+}
+details.popout > summary{
+    list-style: none;
+}
+.popout-panel{
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0px;
+    z-index: 60;
+    min-width: 260px;
+    border: 1px solid var(--lib-border);
+    border-radius: 12px;
+    background-color: var(--lib-popup);
+    color: var(--lib-text);
+    box-shadow: var(--lib-shadow);
+    text-align: left;
+}
+html[data-ui-style="youtube"] .popout-panel{
+    border-color: transparent;
+}
+.popout-end > .popout-panel{
+    left: auto;
+    right: 0px;
+}
+.popout-wide{
+    width: min(400px, calc(100vw - 32px));
+}
+.popout-menu{
+    padding: 8px 0px;
+}
+    body .popout-menu .popout-menu-item{
+        gap: 14px;
+        white-space: normal;
+        padding-top: 6px;
+        padding-bottom: 6px;
+    }
+    body .popout-menu .popout-menu-item.is-danger{
+        color: var(--lib-danger);
+    }
+    .popout-menu-item > span{
+        display: flex;
+        flex-direction: column;
+    }
+    .popout-menu-item small{
+        color: var(--lib-text-2);
+        font-size: 0.78rem;
+    }
+    .popout-menu-label{
+        padding: 8px 16px 4px 16px;
+        color: var(--lib-text-2);
+        font-size: 0.78rem;
+        font-weight: 600;
+    }
+    .popout-menu form{
+        margin: 0px;
+    }
+details.popout-sub > summary{
+    list-style: none;
+}
+details.popout-sub > summary::-webkit-details-marker{
+    display: none;
+}
+details.popout-sub[open] > summary{
+    margin-bottom: 0px;
+    background-color: var(--lib-surface-2);
+}
+details.popout-sub > .popout-form{
+    padding: 10px 16px 12px 16px;
+}
+.popout-form{
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 16px;
+}
+    .popout-title{
+        margin: 0px 0px 4px 0px;
+        font-size: 1rem;
+        font-weight: 600;
+    }
+    .popout-form label{
+        font-size: 0.85rem;
+        font-weight: 500;
+    }
+    .popout-form label .optional{
+        color: var(--lib-text-2);
+        font-weight: 400;
+    }
+    .popout-form input:not([type="file"]), .popout-form textarea{
+        width: 100%;
+    }
+    .popout-form textarea{
+        resize: vertical;
+        font-family: inherit;
+    }
+    .popout-form p{
+        margin: 0px;
+        font-size: 0.875rem;
+    }
+    .popout-form p.popout-help{
+        margin-top: -2px;
+        color: var(--lib-text-2);
+        font-size: 0.8rem;
+    }
+    .popout-buttons{
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 4px;
+    }
+
+
+/* ---------- Playlists page ---------- */
+
+.library-page{
+    width: 100%;
+    max-width: 1280px;
+    margin: 0px auto;
+    padding: 8px 24px 40px 24px;
+}
+.library-head{
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px 16px;
+    margin: 20px 0px 20px 0px;
+}
+    .library-title{
+        margin: 0px;
+        font-size: 1.9rem;
+        font-weight: 700;
+        line-height: 1.2;
+    }
+    .library-breadcrumb{
+        margin: 0px 0px 2px 0px;
+        font-size: 0.875rem;
+    }
+    .library-actions{
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 0px;
+    }
+.library-intro{
+    max-width: 680px;
+    margin: -8px 0px 20px 0px;
+    color: var(--lib-text-2);
+}
+.page-message{
+    margin: 0px 0px 16px 0px;
+    padding: 10px 14px;
+    border-radius: var(--lib-radius-small);
+    background-color: var(--lib-surface-2);
+    font-size: 0.9rem;
+}
+.page-message.is-error{
+    background-color: rgba(220, 38, 38, 0.14);
+    font-weight: 500;
+}
+.playlist-mode-banner{
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    margin: 0px 0px 20px 0px;
+    padding: 8px 8px 8px 14px;
+    border-radius: var(--lib-radius-small);
+    background-color: var(--lib-surface-2);
+    font-size: 0.9rem;
+}
+    .playlist-mode-banner > span:not(.playlist-mode-dot){
+        flex: 1;
+        min-width: 0;
+    }
+.playlist-mode-banner.is-compact{
+    font-size: 0.82rem;
+}
+.playlist-mode-dot{
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background-color: var(--lib-brand);
+}
+.playlist-mode-badge{
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background-color: var(--lib-surface-2);
+    color: var(--lib-text);
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+
+.library-grid{
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr));
+    gap: 28px 16px;
+}
+.library-card{
+    position: relative;
+    min-width: 0;
+    padding-top: 8px;
+}
+    /* The two edges peeking out above say it's a playlist, like on
+       YouTube */
+    .library-card::before, .library-card::after{
+        content: "";
+        position: absolute;
+        height: 8px;
+        border-radius: 8px 8px 0px 0px;
+        background-color: var(--lib-surface-3);
+    }
+    .library-card::before{
+        top: 0px;
+        left: 16px;
+        right: 16px;
+        opacity: 0.55;
+    }
+    .library-card::after{
+        top: 4px;
+        left: 8px;
+        right: 8px;
+    }
+    .library-card.is-empty::before, .library-card.is-empty::after{
+        display: none;
+    }
+    .library-card-thumb{
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        aspect-ratio: 16 / 9;
+        overflow: hidden;
+        border-radius: var(--lib-radius);
+        background-color: var(--lib-surface-2);
+    }
+        .library-card-thumb img{
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .library-card-placeholder{
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            color: var(--lib-text-2);
+        }
+            .library-card-placeholder .icon{
+                width: 40px;
+                height: 40px;
+                stroke-width: 1.5;
+            }
+        .library-card-count{
+            position: absolute;
+            right: 6px;
+            bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 6px 2px 4px;
+            border-radius: 4px;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #ffffff;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+            .library-card-count .icon{
+                width: 16px;
+                height: 16px;
+            }
+    /* Over the thumbnail on hover */
+    body .library-card-play{
+        position: absolute;
+        top: 8px;
+        left: 0px;
+        right: 0px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        aspect-ratio: 16 / 9;
+        border-radius: var(--lib-radius);
+        background-color: rgba(0, 0, 0, 0.6);
+        color: #ffffff;
+        font-size: 0.9rem;
+        font-weight: 600;
+        text-decoration: none;
+        opacity: 0;
+        transition: opacity 0.15s;
+    }
+    body .library-card-play:link, body .library-card-play:visited{
+        color: #ffffff;
+    }
+    .library-card:hover .library-card-play,
+    body .library-card-play:focus-visible{
+        opacity: 1;
+        text-decoration: none;
+    }
+    @media (hover: none){
+        body .library-card-play{
+            display: none;
+        }
+    }
+    .library-card-title{
+        margin: 10px 0px 2px 0px;
+        font-size: 1rem;
+        font-weight: 600;
+        line-height: 1.3;
+    }
+        body .library-card-title a{
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            color: var(--lib-text);
+            overflow-wrap: anywhere;
+        }
+    /* A line each: the cards are too narrow to fit them side by side */
+    .library-card-meta{
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
+        margin: 0px;
+        color: var(--lib-text-2);
+        font-size: 0.82rem;
+    }
+        .library-card-meta .playlist-mode-badge{
+            margin-top: 4px;
+        }
+
+.library-hint{
+    max-width: 680px;
+    margin-top: 36px;
+    padding: 18px 22px;
+    border-radius: var(--lib-radius);
+    background-color: var(--lib-surface-2);
+}
+    .library-hint h2{
+        margin: 0px 0px 8px 0px;
+        font-size: 1rem;
+    }
+    .library-hint ul{
+        margin: 0px;
+        padding-left: 20px;
+    }
+    .library-hint li{
+        margin: 6px 0px;
+    }
+    .library-hint .icon{
+        width: 18px;
+        height: 18px;
+        vertical-align: -4px;
+    }
+.library-foot{
+    margin: 36px 0px 0px 0px;
+}
+    body .library-foot a{
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 14px 8px 10px;
+        border-radius: var(--lib-control-radius);
+        color: var(--lib-text);
+        font-size: 0.9rem;
+        font-weight: 500;
+        text-decoration: none;
+    }
+    body .library-foot a:hover{
+        background-color: var(--lib-surface-2);
+    }
+    .library-foot .icon{
+        width: 20px;
+        height: 20px;
+        color: var(--lib-text-2);
+    }
+    .library-foot-count{
+        color: var(--lib-text-2);
+        font-variant-numeric: tabular-nums;
+    }
+
+
+/* ---------- A playlist's page, and the queue's ---------- */
+
+.playlist-page{
+    display: grid;
+    grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+    align-items: start;
+    gap: 24px;
+    width: 100%;
+    max-width: 1280px;
+    margin: 0px auto;
+    padding: 24px;
+}
+/* The thumbnail, blurred, behind the playlist's name, like on YouTube. It's
+   always dark, whatever the theme, so the text on it is white. */
+/* Over the rows beside it, so its menu is too */
+.playlist-hero{
+    position: sticky;
+    top: calc(var(--header-height, 0px) + 16px);
+    z-index: 3;
+    border-radius: 16px;
+    background-color: #2a2d33;
+    color: #ffffff;
+}
+/* In a layer of its own that clips the blur, so the header itself doesn't
+   have to, which would cut off its More menu */
+.playlist-hero-background{
+    position: absolute;
+    inset: 0px;
+    z-index: -1;
+    overflow: hidden;
+    border-radius: inherit;
+}
+.playlist-hero-background::before{
+    content: "";
+    position: absolute;
+    inset: -60px;
+    background-image: var(--hero-image, none);
+    background-position: center;
+    background-size: cover;
+    filter: blur(50px) saturate(1.4);
+}
+.playlist-hero-background::after{
+    content: "";
+    position: absolute;
+    inset: 0px;
+    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0.7));
+}
+.playlist-hero-inner{
+    padding: 20px;
+}
+body .playlist-hero-thumb{
+    position: relative;
+    display: block;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    border-radius: 12px;
+    background-color: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+}
+    .playlist-hero-thumb img{
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    .playlist-hero-thumb .library-card-placeholder{
+        color: rgba(255, 255, 255, 0.7);
+    }
+    .playlist-hero-play{
+        position: absolute;
+        inset: 0px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        background-color: rgba(0, 0, 0, 0.55);
+        font-weight: 600;
+        opacity: 0;
+        transition: opacity 0.15s;
+    }
+    .playlist-hero-thumb:hover .playlist-hero-play{
+        opacity: 1;
+    }
+.playlist-hero-title{
+    margin: 18px 0px 6px 0px;
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+.playlist-hero-meta{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 8px;
+    margin: 0px;
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 0.875rem;
+}
+    .playlist-hero-meta > span + span:not(.meta-updated)::before{
+        content: "·";
+        margin-right: 8px;
+    }
+    .playlist-hero-meta > .meta-updated{
+        flex-basis: 100%;
+    }
+.playlist-hero-note{
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin: 12px 0px 0px 0px;
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 0.85rem;
+    line-height: 1.45;
+}
+.playlist-hero-actions{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 18px;
+}
+    .playlist-hero-actions form{
+        margin: 0px;
+    }
+    .playlist-hero-actions .popout-panel{
+        color: var(--lib-text);
+    }
+
+.playlist-main{
+    min-width: 0;
+}
+.playlist-rows{
+    list-style: none;
+    margin: 0px;
+    padding: 0px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.playlist-row{
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px 4px 0px;
+    border-radius: var(--lib-radius);
+    background-color: transparent;
+}
+.playlist-row:hover{
+    background-color: var(--lib-surface-2);
+}
+    .playlist-row-handle{
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        align-self: stretch;
+        width: 28px;
+        flex-shrink: 0;
+        color: var(--lib-text-2);
+        cursor: grab;
+        touch-action: none;
+        opacity: 0;
+    }
+    .playlist-row-handle .icon{
+        width: 20px;
+        height: 20px;
+    }
+    .playlist-row:hover .playlist-row-handle,
+    .playlist-row.is-dragging .playlist-row-handle{
+        opacity: 1;
+    }
+    @media (hover: none){
+        .playlist-row-handle{
+            opacity: 1;
+        }
+    }
+    .playlist-row-index{
+        width: 28px;
+        flex-shrink: 0;
+        color: var(--lib-text-2);
+        font-size: 0.85rem;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+    }
+    .playlist-row > .item-box{
+        flex: 1;
+        min-width: 0;
+    }
+    .playlist-rows .item{
+        background-color: transparent;
+        box-shadow: none;
+        border-radius: var(--lib-radius-small);
+    }
+    .playlist-rows .no-description .thumbnail-box{
+        width: 160px;
+        height: 90px;
+        border-radius: var(--lib-radius-small);
+    }
+    .playlist-rows .item-metadata{
+        padding-top: 2px;
+        padding-bottom: 2px;
+        padding-left: 12px;
+    }
+    .playlist-row-action{
+        flex-shrink: 0;
+        margin: 0px;
+    }
+.hidden-videos-page .playlist-row{
+    padding-left: 8px;
+}
+.playlist-rows.is-sorting{
+    user-select: none;
+    cursor: grabbing;
+}
+.playlist-row.is-dragging{
+    z-index: 2;
+    background-color: var(--lib-popup);
+    box-shadow: var(--lib-shadow);
+}
+.playlist-row.is-dragging .playlist-row-handle{
+    cursor: grabbing;
+}
+.playlist-main .page-button-row{
+    margin-top: 16px;
+}
+
+.playlist-empty{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 56px 24px;
+    border-radius: var(--lib-radius);
+    background-color: var(--lib-surface-2);
+    text-align: center;
+}
+    .playlist-empty > .icon{
+        width: 44px;
+        height: 44px;
+        stroke-width: 1.4;
+        color: var(--lib-text-2);
+    }
+    .playlist-empty h2{
+        margin: 14px 0px 6px 0px;
+        font-size: 1.15rem;
+    }
+    .playlist-empty p{
+        max-width: 420px;
+        margin: 0px;
+        color: var(--lib-text-2);
+    }
+
+@media (max-width: 900px){
+    .playlist-page{
+        grid-template-columns: minmax(0, 1fr);
+        padding: 12px;
+    }
+    .playlist-hero{
+        position: relative;
+        top: 0px;
+    }
+    .playlist-hero-inner{
+        display: grid;
+        grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
+        column-gap: 18px;
+        align-items: start;
+    }
+        .playlist-hero-thumb{
+            grid-row: 1 / span 5;
+        }
+        .playlist-hero-title{
+            margin-top: 0px;
+        }
+}
+@media (max-width: 600px){
+    .library-page{
+        padding: 4px 12px 32px 12px;
+    }
+    /* Dropdowns span the row of buttons they're in, so they fit */
+    .library-actions, .playlist-hero-actions{
+        position: relative;
+    }
+    .library-actions > details.popout,
+    .playlist-hero-actions > details.popout{
+        position: static;
+    }
+    .library-actions > details.popout > .popout-panel,
+    .playlist-hero-actions > details.popout > .popout-panel{
+        left: 0px;
+        right: 0px;
+        width: auto;
+        min-width: 0px;
+    }
+    .playlist-hero-inner{
+        display: block;
+    }
+        .playlist-hero-title{
+            margin-top: 14px;
+        }
+    .playlist-rows .no-description .thumbnail-box{
+        width: 120px;
+        height: 68px;
+    }
+    .playlist-row-index{
+        display: none;
+    }
+}
+
+
+/* ---------- Watch page ---------- */
+
+.watch-actions{
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+    .watch-actions .icon{
+        width: 18px;
+        height: 18px;
+    }
+    body .watch-actions .watch-menu-button{
+        width: 30px;
+        padding: 0px;
+        justify-content: center;
+    }
+
+/* Autoplay and Playlist mode */
+.up-next-controls{
+    margin-bottom: 12px;
+    overflow: hidden;
+    border: 1px solid var(--lib-border);
+    border-radius: var(--lib-radius);
+    background-color: var(--lib-surface);
+}
+html[data-ui-style="youtube"] .up-next-controls{
+    border-color: transparent;
+    background-color: var(--lib-surface-2);
+}
+html[data-ui-style="classic"] .up-next-controls{
+    border-radius: 0px;
+}
+.up-next-controls > * + *{
+    border-top: 1px solid var(--lib-border);
+}
+html[data-ui-style="youtube"] .up-next-controls > * + *{
+    border-top-color: var(--background-color, transparent);
+}
+.up-next-toggle{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    cursor: pointer;
+}
+.autoplay-toggle-container.up-next-toggle{
+    margin-bottom: 0px;
+}
+    .up-next-label{
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+    }
+    .up-next-name{
+        font-size: 0.9rem;
+        font-weight: 500;
+    }
+    .up-next-help{
+        color: var(--lib-text-2);
+        font-size: 0.78rem;
+    }
+    .up-next-toggle input{
+        flex-shrink: 0;
+        margin: 0px;
+    }
+.playlist-mode-target{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0px 8px 10px 14px;
+}
+.playlist-mode:not(.is-on) .playlist-mode-target{
+    opacity: 0.65;
+}
+    .playlist-mode-target label{
+        flex-shrink: 0;
+        color: var(--lib-text-2);
+        font-size: 0.82rem;
+    }
+    .playlist-mode-target select{
+        flex: 1;
+        min-width: 0;
+        min-height: 32px;
+        padding-top: 3px;
+        padding-bottom: 3px;
+        font-size: 0.85rem;
+    }
+    body .playlist-mode-open{
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        flex-shrink: 0;
+        border-radius: 50%;
+        color: var(--lib-text);
+    }
+    body .playlist-mode-open:hover{
+        background-color: var(--lib-surface-3);
+        text-decoration: none;
+    }
+    .playlist-mode-open .icon{
+        width: 20px;
+        height: 20px;
+    }
+.playlist-mode-new{
+    display: flex;
+    gap: 6px;
+    padding: 0px 8px 10px 14px;
+}
+    .playlist-mode-new input{
+        flex: 1;
+        min-width: 0;
+        min-height: 30px;
+    }
+.playlist-mode-status{
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: -2px 0px 0px 0px;
+    padding: 0px 14px 10px 14px;
+    color: var(--lib-text-2);
+    font-size: 0.8rem;
+}
+.playlist-mode-status:empty, .playlist-mode:not(.is-on) .playlist-mode-status{
+    display: none;
+}
+    .playlist-mode-status .icon{
+        width: 16px;
+        height: 16px;
+        stroke-width: 2.25;
+        color: var(--lib-accent);
+    }
+
+/* The YouTube or local playlist beside the video */
+.playlist-autoplay{
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+}
+.playlist-shuffled{
+    display: inline-flex !important;
+    align-items: center;
+    gap: 3px;
+}
+    .playlist-shuffled .icon{
+        width: 16px;
+        height: 16px;
+    }
+
+/* The queue */
+.queue-panel{
+    margin-bottom: 12px;
+    overflow: hidden;
+    border: 1px solid var(--lib-border);
+    border-radius: var(--lib-radius);
+    background-color: var(--lib-surface);
+}
+html[data-ui-style="youtube"] .queue-panel{
+    border-color: transparent;
+    background-color: var(--lib-surface-2);
+}
+.queue-panel-header{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 10px 8px 14px;
+}
+    .queue-panel-heading h3{
+        margin: 0px;
+        font-size: 1rem;
+        font-weight: 600;
+    }
+        body .queue-panel-heading h3 a{
+            color: var(--lib-text);
+        }
+    .queue-panel-count{
+        color: var(--lib-text-2);
+        font-size: 0.8rem;
+    }
+    .queue-panel-clear{
+        margin: 0px;
+    }
+.queue-panel-items.playlist-rows{
+    max-height: 340px;
+    overflow-y: auto;
+    padding: 0px 6px 8px 0px;
+}
+    .queue-panel .playlist-row{
+        padding: 3px 6px 3px 0px;
+    }
+    .queue-panel .playlist-row-handle{
+        width: 24px;
+    }
+    html[data-ui-style="youtube"] .queue-panel .playlist-row:hover{
+        background-color: var(--lib-surface-3);
+    }
+    .queue-panel .thumbnail-box{
+        width: 112px !important;
+        height: 63px !important;
+    }
+    .queue-panel .item .title{
+        font-size: 0.875rem;
+    }
+    .queue-panel .item-metadata{
+        padding-left: 8px !important;
+    }
+
+@media (prefers-reduced-motion: reduce){
+    .ytl-toast, .is-leaving, .item .item-menu-button,
+    body .library-card-play, .playlist-hero-play{
+        transition: none;
+    }
+    .ytl-spinner{
+        animation: none;
+    }
+}
+
+
+/* ---------- Playlist mode: clicking a video adds it ---------- */
+
+html.playlist-mode-active .item-box[data-video-id]:not([data-menu-context^="playlist:"]):not([data-menu-context="queue"]) a[href*="/watch?"]{
+    cursor: copy;
+}
+.item-box.is-added .thumbnail-box::after{
+    content: "Added";
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background-color: rgba(0, 0, 0, 0.8);
+    color: #ffffff;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.4;
+}

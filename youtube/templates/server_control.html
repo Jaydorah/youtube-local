@@ -1,0 +1,42 @@
+{% set page_title = 'Restarting' if restarting else 'Stopped' %}
+{% extends "base.html" %}
+{% block style %}
+    .server-control-message{
+        max-width: 640px;
+        margin: 60px auto;
+        padding: 0px 16px;
+        font-size: 1.1rem;
+        text-align: center;
+    }
+{% endblock style %}
+
+{% block main %}
+    {% if restarting %}
+        <p id="server-control-message" class="server-control-message">Restarting youtube-local&hellip;</p>
+        <script>
+            // The old process answers for another half second, so wait
+            // before asking whether the new one is up
+            (function() {
+                var message = document.getElementById('server-control-message');
+                var tries = 0;
+                function check() {
+                    tries++;
+                    fetch('/youtube.com/settings', {cache: 'no-store'}).then(function(response) {
+                        if (response.ok)
+                            window.location.replace('/youtube.com/settings');
+                        else
+                            retry();
+                    }, retry);
+                }
+                function retry() {
+                    if (tries === 30)
+                        message.textContent = 'Still not back after 30 seconds. Check its log or output for errors, or start it again by hand.';
+                    setTimeout(check, 1000);
+                }
+                setTimeout(check, 1500);
+            }());
+        </script>
+    {% else %}
+        <p class="server-control-message">youtube-local has stopped. Start it again to use it.</p>
+    {% endif %}
+{% endblock %}

@@ -575,7 +575,20 @@ def concat_or_none(*strings):
     return result
 
 
+# YouTube links video thumbnails with a signature that changes in every
+# response, so the browser would download the same picture again on every
+# page. The plain address of the same picture never changes, and the browser
+# keeps it for a week (server.py). The subscriptions feed uses the same one.
+SIGNED_THUMBNAIL_RE = re.compile(
+    r'https://i\.ytimg\.com/vi(?:_webp)?/[\w-]{11}/'
+    r'(?:(?:hq|mq|sd)?default|hq720)\.(?:jpg|webp)(?:\?.*)?')
+
 def prefix_urls(item):
+    thumbnail = item.get('thumbnail')
+    if (item.get('type') == 'video' and item.get('id') and thumbnail
+            and SIGNED_THUMBNAIL_RE.fullmatch(thumbnail)):
+        item['thumbnail'] = ('https://i.ytimg.com/vi/' + item['id']
+                             + '/mqdefault.jpg')
     if settings.proxy_images:
         try:
             item['thumbnail'] = prefix_url(item['thumbnail'])
@@ -865,3 +878,40 @@ def call_youtube_api(client, api, data):
         report_text='Fetched ' + client + ' youtubei ' + api
     ).decode('utf-8')
     return response
+
+
+COUNT_SUFFIXES = ((10**12, 'T'), (10**9, 'B'), (10**6, 'M'), (10**3, 'K'))
+
+def abbreviate_count(num):
+    '''1234 -> "1.23K", 15100 -> "15.1K", 2510000 -> "2.51M". Truncates like
+    YouTube does, so 999,999 is "999K" rather than "1000K"'''
+    for divisor, suffix in COUNT_SUFFIXES:
+        if num >= divisor:
+            break
+    else:
+        return str(num)
+    whole = num // divisor
+    decimals = max(0, 3 - len(str(whole)))
+    scaled = num * 10**decimals // divisor
+    whole, fraction = divmod(scaled, 10**decimals)
+    text = str(whole)
+    if decimals:
+        fraction = str(fraction).rjust(decimals, '0').rstrip('0')
+        if fraction:
+            text += '.' + fraction
+    return text + suffix
+
+def format_count(num):
+    '''A view, like, subscriber or video count, commatized or abbreviated
+    depending on the abbreviate_numbers setting. Counts YouTube already
+    abbreviated, such as "15.1M", are left as they are'''
+    if num is None or num == '':
+        return ''
+    if isinstance(num, str):
+        try:
+            num = int(num.replace(',', '').strip())
+        except ValueError:
+            return num
+    if settings.abbreviate_numbers:
+        return abbreviate_count(num)
+    return '{:,}'.format(num)
